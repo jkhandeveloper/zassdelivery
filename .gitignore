@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Test output
+coverage/
+.nyc_output/
+
+# Environment — never commit real secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor / OS
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Prisma local artifacts
+prisma/*.db
+prisma/*.db-journal
+
+# Docker local volumes
+.docker-data/
+
+# Local Claude Code settings (machine-specific)
+.claude/settings.local.json

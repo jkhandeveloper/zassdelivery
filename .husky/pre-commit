@@ -1,0 +1,4 @@
+# Formats and lints only the files being committed, so the hook stays fast as
+# the codebase grows. Type errors and the full test suite are left to CI —
+# running them on every commit would make committing slow enough to be bypassed.
+npx lint-staged

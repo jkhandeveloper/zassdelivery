@@ -1,0 +1,1547 @@
+// ─────────────────────────────────────────────────────────────
+// ZassDelivery — production database schema
+//
+// Conventions used throughout:
+//   • Money is Decimal(10,2) — never Float. Wallet balances use Decimal(12,2).
+//   • Coordinates are Float (double precision) so distance maths stays plain SQL.
+//   • All timestamps are Timestamptz(3); the platform operates in Asia/Karachi.
+//   • Tables and columns are snake_case via @map; the client stays camelCase.
+//   • Rows customers can "delete" are soft-deleted via deletedAt.
+//   • Orders snapshot their prices, names and address. Menus change; a
+//     historical order must never change with them.
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═════════════════════════════════════════════════════════════
+// ENUMS
+// ═════════════════════════════════════════════════════════════
+
+enum UserRole {
+  CUSTOMER
+  RIDER
+  VENDOR_OWNER
+  VENDOR_STAFF
+  ADMIN
+  SUPER_ADMIN
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  /// Account created, phone not yet verified. Cannot authenticate.
+  PENDING_VERIFICATION
+  ACTIVE
+  /// Temporarily blocked by an operator; may be restored.
+  SUSPENDED
+  /// Permanently blocked.
+  BANNED
+
+  @@map("user_status")
+}
+
+enum AddressLabel {
+  HOME
+  WORK
+  OTHER
+
+  @@map("address_label")
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+
+  @@map("day_of_week")
+}
+
+enum RestaurantStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  /// Blocked by an operator.
+  SUSPENDED
+  /// Owner-initiated pause; still listed but not orderable.
+  TEMPORARILY_CLOSED
+  REJECTED
+
+  @@map("restaurant_status")
+}
+
+enum PriceRange {
+  BUDGET
+  MODERATE
+  PREMIUM
+
+  @@map("price_range")
+}
+
+enum MenuItemStatus {
+  AVAILABLE
+  OUT_OF_STOCK
+  /// Hidden from customers but retained for historical orders.
+  HIDDEN
+
+  @@map("menu_item_status")
+}
+
+enum SpiceLevel {
+  NONE
+  MILD
+  MEDIUM
+  HOT
+  EXTRA_HOT
+
+  @@map("spice_level")
+}
+
+enum OrderType {
+  DELIVERY
+  PICKUP
+
+  @@map("order_type")
+}
+
+enum OrderStatus {
+  /// Created but awaiting an online payment authorisation.
+  PENDING_PAYMENT
+  PLACED
+  CONFIRMED
+  PREPARING
+  READY_FOR_PICKUP
+  PICKED_UP
+  ON_THE_WAY
+  DELIVERED
+  CANCELLED
+  REJECTED
+  FAILED
+
+  @@map("order_status")
+}
+
+enum ActorType {
+  CUSTOMER
+  RESTAURANT
+  DRIVER
+  ADMIN
+  SYSTEM
+
+  @@map("actor_type")
+}
+
+enum PaymentMethod {
+  /// Dominant method in the target market.
+  CASH_ON_DELIVERY
+  WALLET
+  CARD
+  JAZZCASH
+  EASYPAISA
+  BANK_TRANSFER
+
+  @@map("payment_method")
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELLED
+
+  @@map("payment_status")
+}
+
+enum TransactionType {
+  PAYMENT
+  REFUND
+  /// Money moving out to a restaurant or driver.
+  PAYOUT
+  COMMISSION
+  ADJUSTMENT
+  FEE
+
+  @@map("transaction_type")
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REVERSED
+
+  @@map("transaction_status")
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+
+  @@map("wallet_transaction_type")
+}
+
+enum WalletTransactionReason {
+  ORDER_PAYMENT
+  ORDER_REFUND
+  TOPUP
+  CASHBACK
+  REFERRAL_BONUS
+  DRIVER_EARNING
+  WITHDRAWAL
+  ADJUSTMENT
+
+  @@map("wallet_transaction_reason")
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FREE_DELIVERY
+
+  @@map("coupon_type")
+}
+
+enum DeliveryFeeType {
+  FLAT
+  PER_KM
+  /// Banded by distance: each row covers one distance range.
+  TIERED
+
+  @@map("delivery_fee_type")
+}
+
+enum DriverStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+  REJECTED
+
+  @@map("driver_status")
+}
+
+enum DriverAvailability {
+  OFFLINE
+  ONLINE
+  ON_DELIVERY
+  ON_BREAK
+
+  @@map("driver_availability")
+}
+
+enum VehicleType {
+  MOTORCYCLE
+  BICYCLE
+  CAR
+  RICKSHAW
+  ON_FOOT
+
+  @@map("vehicle_type")
+}
+
+enum NotificationType {
+  ORDER_UPDATE
+  PROMOTION
+  WALLET
+  SUPPORT
+  SYSTEM
+
+  @@map("notification_type")
+}
+
+enum NotificationChannel {
+  IN_APP
+  PUSH
+  SMS
+  EMAIL
+
+  @@map("notification_channel")
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_ON_CUSTOMER
+  RESOLVED
+  CLOSED
+
+  @@map("ticket_status")
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+
+  @@map("ticket_priority")
+}
+
+enum TicketCategory {
+  ORDER_ISSUE
+  PAYMENT_ISSUE
+  DELIVERY_ISSUE
+  ACCOUNT
+  RESTAURANT_COMPLAINT
+  OTHER
+
+  @@map("ticket_category")
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  APPROVE
+  REJECT
+  REFUND
+  STATUS_CHANGE
+  PERMISSION_CHANGE
+
+  @@map("audit_action")
+}
+
+enum BannerPlacement {
+  HOME_TOP
+  HOME_MIDDLE
+  CATEGORY_PAGE
+  CHECKOUT
+
+  @@map("banner_placement")
+}
+
+enum SettingValueType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+
+  @@map("setting_value_type")
+}
+
+// ═════════════════════════════════════════════════════════════
+// IDENTITY & ACCESS CONTROL
+// ═════════════════════════════════════════════════════════════
+
+/// Every human actor on the platform. Phone number is the login identity;
+/// `passwordHash` stays null for OTP-only accounts and is populated only for
+/// back-office roles that sign in with a password.
+model User {
+  id String @id @default(cuid())
+
+  /// E.164 format, e.g. "+923001234567". Unique across all roles.
+  phone           String    @unique @db.VarChar(20)
+  phoneVerifiedAt DateTime? @map("phone_verified_at") @db.Timestamptz(3)
+
+  email           String?   @unique @db.VarChar(160)
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
+  passwordHash    String?   @map("password_hash") @db.VarChar(255)
+
+  fullName  String  @map("full_name") @db.VarChar(120)
+  avatarUrl String? @map("avatar_url") @db.VarChar(500)
+  /// UI language preference: "en" or "ur".
+  locale    String  @default("en") @db.VarChar(5)
+
+  /// Primary role, always present. This is the fast path the RBAC guard reads
+  /// on every request; the Role/Permission tables layer granular capabilities
+  /// on top of it.
+  role   UserRole   @default(CUSTOMER)
+  status UserStatus @default(PENDING_VERIFICATION)
+
+  /// Device token for push notifications.
+  pushToken   String?   @map("push_token") @db.VarChar(500)
+  lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz(3)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  /// Soft delete. Non-null rows are excluded from all read paths.
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  addresses          Address[]
+  roleAssignments    UserRoleAssignment[]
+  restaurantsOwned   Restaurant[]
+  driverProfile      Driver?
+  wallet             Wallet?
+  orders             Order[]
+  payments           Payment[]
+  transactions       Transaction[]
+  couponRedemptions  CouponRedemption[]
+  favorites          Favorite[]
+  reviews            Review[]
+  notifications      Notification[]
+  supportTickets     SupportTicket[]        @relation("TicketOwner")
+  assignedTickets    SupportTicket[]        @relation("TicketAssignee")
+  ticketMessages     SupportTicketMessage[]
+  auditLogs          AuditLog[]
+  couponsCreated     Coupon[]
+  settingsUpdated    Setting[]
+  orderStatusChanges OrderStatusHistory[]
+
+  @@index([role, status])
+  @@index([status, createdAt])
+  @@index([deletedAt])
+  @@index([createdAt])
+  @@map("users")
+}
+
+/// A named bundle of permissions. `slug` mirrors a `UserRole` value for the
+/// six built-in roles; additional roles may be created by administrators.
+model Role {
+  id          String  @id @default(cuid())
+  name        String  @unique @db.VarChar(80)
+  slug        String  @unique @db.VarChar(80)
+  description String? @db.VarChar(255)
+  /// System roles cannot be renamed or deleted through the admin API.
+  isSystem    Boolean @default(false) @map("is_system")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  permissions RolePermission[]
+  users       UserRoleAssignment[]
+
+  @@index([isSystem])
+  @@map("roles")
+}
+
+/// A single capability, addressed as `resource.action` (e.g. "orders.refund").
+model Permission {
+  id          String  @id @default(cuid())
+  code        String  @unique @db.VarChar(120)
+  resource    String  @db.VarChar(60)
+  action      String  @db.VarChar(60)
+  description String? @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  roles RolePermission[]
+
+  @@unique([resource, action])
+  @@index([resource])
+  @@map("permissions")
+}
+
+/// Grants a permission to a role.
+model RolePermission {
+  roleId       String   @map("role_id")
+  permissionId String   @map("permission_id")
+  grantedAt    DateTime @default(now()) @map("granted_at") @db.Timestamptz(3)
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+/// Assigns an additional role to a user. Permissions are additive on top of
+/// those implied by `User.role`.
+model UserRoleAssignment {
+  userId     String   @map("user_id")
+  roleId     String   @map("role_id")
+  assignedAt DateTime @default(now()) @map("assigned_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_role_assignments")
+}
+
+// ═════════════════════════════════════════════════════════════
+// GEOGRAPHY
+// ═════════════════════════════════════════════════════════════
+
+/// A serviceable city. Seeded with Pabbi, Nowshera and Peshawar.
+model City {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(80)
+  /// Urdu display name, shown when the user's locale is "ur".
+  nameUr    String?  @map("name_ur") @db.VarChar(80)
+  slug      String   @unique @db.VarChar(80)
+  province  String   @default("Khyber Pakhtunkhwa") @db.VarChar(80)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  zones       Zone[]
+  addresses   Address[]
+  restaurants Restaurant[]
+  banners     Banner[]
+
+  @@index([isActive])
+  @@map("cities")
+}
+
+/// A delivery zone within a city, modelled as a centre point plus a radius.
+/// Distance checks use the Haversine formula against `centerLat`/`centerLng`.
+model Zone {
+  id     String @id @default(cuid())
+  cityId String @map("city_id")
+  name   String @db.VarChar(120)
+  slug   String @db.VarChar(120)
+
+  centerLat    Float @map("center_lat")
+  centerLng    Float @map("center_lng")
+  /// Service radius from the centre point, in metres.
+  radiusMeters Int   @map("radius_meters")
+
+  /// Default flat fee, used when no DeliveryFee band matches.
+  deliveryFee    Decimal @map("delivery_fee") @db.Decimal(10, 2)
+  minOrderAmount Decimal @default(0) @map("min_order_amount") @db.Decimal(10, 2)
+  /// Baseline promised delivery time shown to the customer, in minutes.
+  etaMinutes     Int     @default(35) @map("eta_minutes")
+
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  city         City          @relation(fields: [cityId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  addresses    Address[]
+  restaurants  Restaurant[]
+  drivers      Driver[]
+  orders       Order[]
+  deliveryFees DeliveryFee[]
+  coupons      Coupon[]
+
+  @@unique([cityId, slug])
+  @@index([cityId, isActive])
+  @@index([isActive])
+  @@map("zones")
+}
+
+/// Distance-banded delivery pricing for a zone. The band whose
+/// [minDistanceKm, maxDistanceKm) range contains the order distance wins;
+/// `Zone.deliveryFee` is the fallback when nothing matches.
+model DeliveryFee {
+  id     String          @id @default(cuid())
+  zoneId String          @map("zone_id")
+  name   String          @db.VarChar(80)
+  type   DeliveryFeeType @default(TIERED)
+
+  minDistanceKm Decimal @default(0) @map("min_distance_km") @db.Decimal(6, 2)
+  maxDistanceKm Decimal @map("max_distance_km") @db.Decimal(6, 2)
+
+  baseFee  Decimal @map("base_fee") @db.Decimal(10, 2)
+  /// Added per kilometre beyond `minDistanceKm`. Zero for FLAT bands.
+  perKmFee Decimal @default(0) @map("per_km_fee") @db.Decimal(10, 2)
+
+  /// Order subtotal at or above which delivery becomes free. Null disables it.
+  freeDeliveryThreshold Decimal? @map("free_delivery_threshold") @db.Decimal(10, 2)
+
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  zone Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([zoneId, minDistanceKm])
+  @@index([zoneId, isActive])
+  @@map("delivery_fees")
+}
+
+/// A saved delivery address in a customer's address book.
+model Address {
+  id     String       @id @default(cuid())
+  userId String       @map("user_id")
+  label  AddressLabel @default(HOME)
+
+  /// Set when the order is being delivered to someone other than the account holder.
+  recipientName  String? @map("recipient_name") @db.VarChar(120)
+  recipientPhone String? @map("recipient_phone") @db.VarChar(20)
+
+  line1    String  @db.VarChar(180)
+  line2    String? @db.VarChar(180)
+  /// Free-text nearby reference — how addresses are actually found locally.
+  landmark String? @db.VarChar(180)
+
+  cityId String  @map("city_id")
+  zoneId String? @map("zone_id")
+
+  latitude  Float
+  longitude Float
+
+  deliveryNotes String? @map("delivery_notes") @db.VarChar(280)
+  isDefault     Boolean @default(false) @map("is_default")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  city   City    @relation(fields: [cityId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  zone   Zone?   @relation(fields: [zoneId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  orders Order[]
+
+  @@index([userId, isDefault])
+  @@index([userId, deletedAt])
+  @@index([zoneId])
+  @@index([cityId])
+  @@index([latitude, longitude])
+  @@map("addresses")
+}
+
+// ═════════════════════════════════════════════════════════════
+// RESTAURANTS
+// ═════════════════════════════════════════════════════════════
+
+/// A cuisine or listing category, e.g. "BBQ", "Fast Food", "Desi".
+model RestaurantCategory {
+  id        String  @id @default(cuid())
+  name      String  @unique @db.VarChar(80)
+  nameUr    String? @map("name_ur") @db.VarChar(80)
+  slug      String  @unique @db.VarChar(80)
+  iconUrl   String? @map("icon_url") @db.VarChar(500)
+  sortOrder Int     @default(0) @map("sort_order")
+  isActive  Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  restaurants RestaurantCategoryAssignment[]
+
+  @@index([isActive, sortOrder])
+  @@map("restaurant_categories")
+}
+
+/// Join table: a restaurant may appear under several categories.
+model RestaurantCategoryAssignment {
+  restaurantId String @map("restaurant_id")
+  categoryId   String @map("category_id")
+
+  restaurant Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  category   RestaurantCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([restaurantId, categoryId])
+  @@index([categoryId])
+  @@map("restaurant_category_assignments")
+}
+
+model Restaurant {
+  id      String @id @default(cuid())
+  ownerId String @map("owner_id")
+
+  name        String  @db.VarChar(140)
+  nameUr      String? @map("name_ur") @db.VarChar(140)
+  slug        String  @unique @db.VarChar(160)
+  description String? @db.VarChar(1000)
+
+  logoUrl  String? @map("logo_url") @db.VarChar(500)
+  coverUrl String? @map("cover_url") @db.VarChar(500)
+
+  phone String  @db.VarChar(20)
+  email String? @db.VarChar(160)
+
+  cityId      String  @map("city_id")
+  zoneId      String  @map("zone_id")
+  addressLine String  @map("address_line") @db.VarChar(240)
+  landmark    String? @db.VarChar(180)
+  latitude    Float
+  longitude   Float
+
+  status            RestaurantStatus @default(PENDING_APPROVAL)
+  /// Owner's manual on/off switch, independent of opening hours.
+  isAcceptingOrders Boolean          @default(true) @map("is_accepting_orders")
+  isFeatured        Boolean          @default(false) @map("is_featured")
+  priceRange        PriceRange       @default(MODERATE) @map("price_range")
+
+  /// Denormalised aggregates, recomputed when a review is written. Kept on the
+  /// row because listings sort by rating and would otherwise join every read.
+  rating      Decimal @default(0) @db.Decimal(3, 2)
+  ratingCount Int     @default(0) @map("rating_count")
+
+  minOrderAmount        Decimal @default(0) @map("min_order_amount") @db.Decimal(10, 2)
+  avgPreparationMinutes Int     @default(25) @map("avg_preparation_minutes")
+  /// Platform commission withheld from each order, as a percentage.
+  commissionRate        Decimal @default(15) @map("commission_rate") @db.Decimal(5, 2)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  owner      User                           @relation(fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  city       City                           @relation(fields: [cityId], references: [id], onDelete: Restrict)
+  zone       Zone                           @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  categories RestaurantCategoryAssignment[]
+  images     RestaurantImage[]
+  hours      RestaurantHour[]
+  menus      Menu[]
+  menuItems  MenuItem[]
+  orders     Order[]
+  reviews    Review[]
+  favorites  Favorite[]
+  coupons    Coupon[]
+  banners    Banner[]
+
+  @@index([cityId, status])
+  @@index([zoneId, status])
+  @@index([status, isFeatured])
+  @@index([ownerId])
+  @@index([rating])
+  @@index([deletedAt])
+  @@map("restaurants")
+}
+
+model RestaurantImage {
+  id           String  @id @default(cuid())
+  restaurantId String  @map("restaurant_id")
+  url          String  @db.VarChar(500)
+  caption      String? @db.VarChar(180)
+  sortOrder    Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, sortOrder])
+  @@map("restaurant_images")
+}
+
+/// Weekly opening hours. Without these a restaurant cannot be shown as open or
+/// closed, and orders could be accepted when nobody is there to cook.
+model RestaurantHour {
+  id           String    @id @default(cuid())
+  restaurantId String    @map("restaurant_id")
+  dayOfWeek    DayOfWeek @map("day_of_week")
+  /// Local wall-clock times as "HH:mm", interpreted in Asia/Karachi.
+  opensAt      String    @map("opens_at") @db.VarChar(5)
+  closesAt     String    @map("closes_at") @db.VarChar(5)
+  isClosed     Boolean   @default(false) @map("is_closed")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, dayOfWeek])
+  @@map("restaurant_hours")
+}
+
+// ═════════════════════════════════════════════════════════════
+// MENU
+// ═════════════════════════════════════════════════════════════
+
+/// A restaurant may run several menus, e.g. "Lunch" and "Late Night".
+model Menu {
+  id           String  @id @default(cuid())
+  restaurantId String  @map("restaurant_id")
+  name         String  @db.VarChar(120)
+  description  String? @db.VarChar(500)
+  sortOrder    Int     @default(0) @map("sort_order")
+  isActive     Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  restaurant Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  categories MenuCategory[]
+
+  @@unique([restaurantId, name])
+  @@index([restaurantId, isActive])
+  @@map("menus")
+}
+
+model MenuCategory {
+  id          String  @id @default(cuid())
+  menuId      String  @map("menu_id")
+  name        String  @db.VarChar(120)
+  nameUr      String? @map("name_ur") @db.VarChar(120)
+  description String? @db.VarChar(500)
+  imageUrl    String? @map("image_url") @db.VarChar(500)
+  sortOrder   Int     @default(0) @map("sort_order")
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  menu  Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  items MenuItem[]
+
+  @@unique([menuId, name])
+  @@index([menuId, sortOrder])
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id             String @id @default(cuid())
+  menuCategoryId String @map("menu_category_id")
+  /// Denormalised from the parent menu so restaurant-wide item queries and the
+  /// search index do not need a two-level join on every request.
+  restaurantId   String @map("restaurant_id")
+
+  name        String  @db.VarChar(140)
+  nameUr      String? @map("name_ur") @db.VarChar(140)
+  description String? @db.VarChar(800)
+  imageUrl    String? @map("image_url") @db.VarChar(500)
+
+  basePrice       Decimal  @map("base_price") @db.Decimal(10, 2)
+  /// When set and lower than basePrice, this is the effective price.
+  discountedPrice Decimal? @map("discounted_price") @db.Decimal(10, 2)
+
+  status             MenuItemStatus @default(AVAILABLE)
+  isVegetarian       Boolean        @default(false) @map("is_vegetarian")
+  spiceLevel         SpiceLevel     @default(NONE) @map("spice_level")
+  calories           Int?
+  preparationMinutes Int            @default(15) @map("preparation_minutes")
+  isFeatured         Boolean        @default(false) @map("is_featured")
+  sortOrder          Int            @default(0) @map("sort_order")
+
+  rating      Decimal @default(0) @db.Decimal(3, 2)
+  ratingCount Int     @default(0) @map("rating_count")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  menuCategory MenuCategory  @relation(fields: [menuCategoryId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  variants     MenuVariant[]
+  addOnGroups  AddOnGroup[]
+  orderItems   OrderItem[]
+  favorites    Favorite[]
+
+  @@index([restaurantId, status])
+  @@index([menuCategoryId, sortOrder])
+  @@index([status, isFeatured])
+  @@index([deletedAt])
+  @@map("menu_items")
+}
+
+/// A size or portion choice, e.g. "Half" / "Full". `price` is absolute, not a
+/// delta, so an order line can be priced without reading the parent item.
+model MenuVariant {
+  id          String  @id @default(cuid())
+  menuItemId  String  @map("menu_item_id")
+  name        String  @db.VarChar(80)
+  price       Decimal @db.Decimal(10, 2)
+  isDefault   Boolean @default(false) @map("is_default")
+  isAvailable Boolean @default(true) @map("is_available")
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  menuItem   MenuItem    @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@unique([menuItemId, name])
+  @@index([menuItemId, sortOrder])
+  @@map("menu_variants")
+}
+
+/// A group of add-on choices with selection rules, e.g. "Choose a drink"
+/// (min 0, max 1) or "Pick 2 sauces" (min 2, max 2).
+model AddOnGroup {
+  id         String  @id @default(cuid())
+  menuItemId String  @map("menu_item_id")
+  name       String  @db.VarChar(120)
+  minSelect  Int     @default(0) @map("min_select")
+  maxSelect  Int     @default(1) @map("max_select")
+  isRequired Boolean @default(false) @map("is_required")
+  sortOrder  Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  addOns   AddOn[]
+
+  @@unique([menuItemId, name])
+  @@index([menuItemId, sortOrder])
+  @@map("add_on_groups")
+}
+
+model AddOn {
+  id          String  @id @default(cuid())
+  groupId     String  @map("group_id")
+  name        String  @db.VarChar(120)
+  price       Decimal @default(0) @db.Decimal(10, 2)
+  isAvailable Boolean @default(true) @map("is_available")
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  group           AddOnGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  orderItemAddOns OrderItemAddOn[]
+
+  @@unique([groupId, name])
+  @@index([groupId, sortOrder])
+  @@map("add_ons")
+}
+
+// ═════════════════════════════════════════════════════════════
+// DRIVERS
+// ═════════════════════════════════════════════════════════════
+
+/// Rider profile. One-to-one with a User whose role is RIDER.
+model Driver {
+  id     String @id @default(cuid())
+  userId String @unique @map("user_id")
+
+  /// Pakistani national identity number, stored digits-only.
+  cnic          String  @unique @db.VarChar(15)
+  licenseNumber String? @map("license_number") @db.VarChar(40)
+
+  status       DriverStatus       @default(PENDING_APPROVAL)
+  availability DriverAvailability @default(OFFLINE)
+
+  /// Home zone used to bias dispatch; a driver may still be assigned outside it.
+  zoneId String? @map("zone_id")
+
+  /// Last reported position, refreshed over the tracking socket.
+  currentLat     Float?    @map("current_lat")
+  currentLng     Float?    @map("current_lng")
+  lastLocationAt DateTime? @map("last_location_at") @db.Timestamptz(3)
+
+  rating          Decimal @default(0) @db.Decimal(3, 2)
+  ratingCount     Int     @default(0) @map("rating_count")
+  totalDeliveries Int     @default(0) @map("total_deliveries")
+
+  /// Payout destination for driver earnings.
+  payoutBankName      String? @map("payout_bank_name") @db.VarChar(120)
+  payoutAccountTitle  String? @map("payout_account_title") @db.VarChar(120)
+  payoutAccountNumber String? @map("payout_account_number") @db.VarChar(40)
+
+  verifiedAt DateTime? @map("verified_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zone     Zone?     @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  vehicles Vehicle[]
+  orders   Order[]
+  reviews  Review[]
+
+  @@index([status, availability])
+  @@index([zoneId, availability])
+  @@index([currentLat, currentLng])
+  @@map("drivers")
+}
+
+model Vehicle {
+  id       String      @id @default(cuid())
+  driverId String      @map("driver_id")
+  type     VehicleType @default(MOTORCYCLE)
+
+  make        String? @db.VarChar(60)
+  model       String? @db.VarChar(60)
+  year        Int?
+  color       String? @db.VarChar(40)
+  /// Registration plate, e.g. "PES-1234". Null for ON_FOOT and BICYCLE.
+  plateNumber String? @unique @map("plate_number") @db.VarChar(20)
+
+  registrationDocUrl String? @map("registration_doc_url") @db.VarChar(500)
+  /// The vehicle currently in use when the driver has more than one.
+  isPrimary          Boolean @default(true) @map("is_primary")
+  isActive           Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  driver Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([driverId, isActive])
+  @@map("vehicles")
+}
+
+// ═════════════════════════════════════════════════════════════
+// ORDERS
+// ═════════════════════════════════════════════════════════════
+
+model Order {
+  id          String @id @default(cuid())
+  /// Human-readable reference quoted by customers and support, e.g. "ZD-260804-0001".
+  orderNumber String @unique @map("order_number") @db.VarChar(24)
+
+  customerId   String  @map("customer_id")
+  restaurantId String  @map("restaurant_id")
+  driverId     String? @map("driver_id")
+  addressId    String? @map("address_id")
+  zoneId       String  @map("zone_id")
+
+  type   OrderType   @default(DELIVERY)
+  status OrderStatus @default(PENDING_PAYMENT)
+
+  // ── Delivery snapshot ──
+  // Copied at placement. The customer may later edit or delete the address;
+  // where this order actually went must never change.
+  deliveryLine1    String? @map("delivery_line1") @db.VarChar(180)
+  deliveryLandmark String? @map("delivery_landmark") @db.VarChar(180)
+  deliveryLat      Float?  @map("delivery_lat")
+  deliveryLng      Float?  @map("delivery_lng")
+  recipientName    String? @map("recipient_name") @db.VarChar(120)
+  recipientPhone   String? @map("recipient_phone") @db.VarChar(20)
+  deliveryNotes    String? @map("delivery_notes") @db.VarChar(280)
+
+  // ── Money ──
+  // subtotal - discountAmount + deliveryFee + serviceFee + taxAmount + tipAmount = totalAmount
+  subtotal         Decimal @db.Decimal(10, 2)
+  discountAmount   Decimal @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  deliveryFee      Decimal @default(0) @map("delivery_fee") @db.Decimal(10, 2)
+  serviceFee       Decimal @default(0) @map("service_fee") @db.Decimal(10, 2)
+  taxAmount        Decimal @default(0) @map("tax_amount") @db.Decimal(10, 2)
+  tipAmount        Decimal @default(0) @map("tip_amount") @db.Decimal(10, 2)
+  totalAmount      Decimal @map("total_amount") @db.Decimal(10, 2)
+  /// Platform commission withheld from the restaurant's payout for this order.
+  commissionAmount Decimal @default(0) @map("commission_amount") @db.Decimal(10, 2)
+  currency         String  @default("PKR") @db.VarChar(3)
+
+  couponId   String? @map("coupon_id")
+  /// Snapshot: the coupon may be renamed or deleted later.
+  couponCode String? @map("coupon_code") @db.VarChar(40)
+
+  /// Denormalised from the successful Payment so order lists can filter on
+  /// payment state without joining.
+  paymentMethod PaymentMethod @default(CASH_ON_DELIVERY) @map("payment_method")
+  paymentStatus PaymentStatus @default(PENDING) @map("payment_status")
+
+  distanceKm         Decimal? @map("distance_km") @db.Decimal(6, 2)
+  preparationMinutes Int?     @map("preparation_minutes")
+  customerNote       String?  @map("customer_note") @db.VarChar(500)
+
+  // ── Lifecycle timestamps ──
+  placedAt            DateTime? @map("placed_at") @db.Timestamptz(3)
+  confirmedAt         DateTime? @map("confirmed_at") @db.Timestamptz(3)
+  readyAt             DateTime? @map("ready_at") @db.Timestamptz(3)
+  pickedUpAt          DateTime? @map("picked_up_at") @db.Timestamptz(3)
+  deliveredAt         DateTime? @map("delivered_at") @db.Timestamptz(3)
+  cancelledAt         DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  estimatedDeliveryAt DateTime? @map("estimated_delivery_at") @db.Timestamptz(3)
+
+  cancelledBy        ActorType? @map("cancelled_by")
+  cancellationReason String?    @map("cancellation_reason") @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer       User                 @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  restaurant     Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  driver         Driver?              @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  address        Address?             @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  zone           Zone                 @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  coupon         Coupon?              @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  items          OrderItem[]
+  statusHistory  OrderStatusHistory[]
+  payments       Payment[]
+  transactions   Transaction[]
+  review         Review?
+  redemption     CouponRedemption?
+  supportTickets SupportTicket[]
+
+  @@index([customerId, createdAt])
+  @@index([restaurantId, status])
+  @@index([driverId, status])
+  @@index([status, createdAt])
+  @@index([zoneId, createdAt])
+  @@index([paymentStatus])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+/// One line on an order. Name and price are snapshots — the menu will change.
+model OrderItem {
+  id         String  @id @default(cuid())
+  orderId    String  @map("order_id")
+  /// Nulled if the item is later hard-deleted; the snapshot below survives.
+  menuItemId String? @map("menu_item_id")
+  variantId  String? @map("variant_id")
+
+  nameSnapshot        String  @map("name_snapshot") @db.VarChar(140)
+  variantNameSnapshot String? @map("variant_name_snapshot") @db.VarChar(80)
+
+  unitPrice Decimal @map("unit_price") @db.Decimal(10, 2)
+  quantity  Int
+  /// (unitPrice + add-on prices) × quantity.
+  lineTotal Decimal @map("line_total") @db.Decimal(10, 2)
+
+  notes String? @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  order   Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  item    MenuItem?        @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  variant MenuVariant?     @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  addOns  OrderItemAddOn[]
+
+  @@index([orderId])
+  @@index([menuItemId])
+  @@map("order_items")
+}
+
+model OrderItemAddOn {
+  id          String  @id @default(cuid())
+  orderItemId String  @map("order_item_id")
+  addOnId     String? @map("add_on_id")
+
+  nameSnapshot String  @map("name_snapshot") @db.VarChar(120)
+  price        Decimal @db.Decimal(10, 2)
+  quantity     Int     @default(1)
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  addOn     AddOn?    @relation(fields: [addOnId], references: [id], onDelete: SetNull)
+
+  @@index([orderItemId])
+  @@map("order_item_add_ons")
+}
+
+/// Append-only trail of every status transition. This is what answers
+/// "when was it confirmed and who cancelled it" during a dispute.
+model OrderStatusHistory {
+  id          String       @id @default(cuid())
+  orderId     String       @map("order_id")
+  fromStatus  OrderStatus? @map("from_status")
+  toStatus    OrderStatus  @map("to_status")
+  actor       ActorType    @default(SYSTEM)
+  actorUserId String?      @map("actor_user_id")
+  note        String?      @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actorUser User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
+}
+
+// ═════════════════════════════════════════════════════════════
+// PAYMENTS, TRANSACTIONS & WALLET
+// ═════════════════════════════════════════════════════════════
+
+/// One payment attempt against an order. An order may have several attempts
+/// (a failed card, then cash), so this is deliberately not one-to-one.
+model Payment {
+  id      String @id @default(cuid())
+  orderId String @map("order_id")
+  userId  String @map("user_id")
+
+  method   PaymentMethod
+  status   PaymentStatus @default(PENDING)
+  amount   Decimal       @db.Decimal(10, 2)
+  currency String        @default("PKR") @db.VarChar(3)
+
+  /// Gateway identifiers. Unique so a webhook replay cannot double-credit.
+  gatewayName          String? @map("gateway_name") @db.VarChar(40)
+  gatewayTransactionId String? @unique @map("gateway_transaction_id") @db.VarChar(120)
+  gatewayResponse      Json?   @map("gateway_response")
+
+  refundedAmount Decimal @default(0) @map("refunded_amount") @db.Decimal(10, 2)
+  failureReason  String? @map("failure_reason") @db.VarChar(300)
+
+  paidAt   DateTime? @map("paid_at") @db.Timestamptz(3)
+  failedAt DateTime? @map("failed_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  transactions Transaction[]
+
+  @@index([orderId, status])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("payments")
+}
+
+/// Immutable double-entry-style ledger covering every movement of money:
+/// customer payments, refunds, restaurant and driver payouts, commission.
+model Transaction {
+  id        String  @id @default(cuid())
+  paymentId String? @map("payment_id")
+  orderId   String? @map("order_id")
+  userId    String? @map("user_id")
+
+  type     TransactionType
+  status   TransactionStatus @default(PENDING)
+  amount   Decimal           @db.Decimal(12, 2)
+  currency String            @default("PKR") @db.VarChar(3)
+
+  /// Idempotency key — a gateway callback delivered twice must not post twice.
+  reference   String  @unique @db.VarChar(120)
+  description String? @db.VarChar(300)
+  metadata    Json?
+
+  processedAt DateTime? @map("processed_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  order   Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([orderId])
+  @@index([type, status])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+/// Stored value account. Used for refunds, cashback and driver earnings.
+model Wallet {
+  id     String @id @default(cuid())
+  userId String @unique @map("user_id")
+
+  balance  Decimal @default(0) @db.Decimal(12, 2)
+  currency String  @default("PKR") @db.VarChar(3)
+  /// Freezes the wallet during a fraud investigation.
+  isLocked Boolean @default(false) @map("is_locked")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+/// Append-only wallet ledger. `balanceAfter` is recorded on each row so a
+/// statement can be rendered without replaying the entire history.
+model WalletTransaction {
+  id       String                  @id @default(cuid())
+  walletId String                  @map("wallet_id")
+  type     WalletTransactionType
+  reason   WalletTransactionReason
+
+  amount       Decimal @db.Decimal(12, 2)
+  balanceAfter Decimal @map("balance_after") @db.Decimal(12, 2)
+
+  /// Loose link to whatever caused the movement (order, payment, payout).
+  referenceType String? @map("reference_type") @db.VarChar(40)
+  referenceId   String? @map("reference_id")
+  description   String? @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+  @@index([referenceType, referenceId])
+  @@map("wallet_transactions")
+}
+
+// ═════════════════════════════════════════════════════════════
+// PROMOTIONS
+// ═════════════════════════════════════════════════════════════
+
+model Coupon {
+  id   String     @id @default(cuid())
+  code String     @unique @db.VarChar(40)
+  type CouponType
+
+  /// Percentage (0–100) for PERCENTAGE, otherwise an absolute PKR amount.
+  /// Ignored for FREE_DELIVERY.
+  value             Decimal  @db.Decimal(10, 2)
+  /// Ceiling on a percentage discount, so "50% off" cannot cost more than this.
+  maxDiscountAmount Decimal? @map("max_discount_amount") @db.Decimal(10, 2)
+  minOrderAmount    Decimal  @default(0) @map("min_order_amount") @db.Decimal(10, 2)
+
+  description String? @db.VarChar(300)
+
+  startsAt  DateTime @map("starts_at") @db.Timestamptz(3)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  /// Total redemptions allowed across all users. Null means unlimited.
+  usageLimit   Int? @map("usage_limit")
+  usageCount   Int  @default(0) @map("usage_count")
+  /// Redemptions allowed per user. Null means unlimited.
+  perUserLimit Int? @map("per_user_limit")
+
+  /// Scope restrictions. Null means the coupon is unrestricted on that axis.
+  restaurantId   String? @map("restaurant_id")
+  zoneId         String? @map("zone_id")
+  firstOrderOnly Boolean @default(false) @map("first_order_only")
+
+  isActive    Boolean @default(true) @map("is_active")
+  createdById String? @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  restaurant  Restaurant?        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  zone        Zone?              @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  createdBy   User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  orders      Order[]
+  redemptions CouponRedemption[]
+
+  @@index([isActive, startsAt, expiresAt])
+  @@index([restaurantId])
+  @@index([zoneId])
+  @@map("coupons")
+}
+
+/// Records each use of a coupon. This is what `perUserLimit` is enforced
+/// against, and the unique constraint on `orderId` stops one order from
+/// consuming a coupon twice under concurrent requests.
+model CouponRedemption {
+  id       String @id @default(cuid())
+  couponId String @map("coupon_id")
+  userId   String @map("user_id")
+  orderId  String @unique @map("order_id")
+
+  discountAmount Decimal @map("discount_amount") @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([couponId, userId])
+  @@index([userId])
+  @@map("coupon_redemptions")
+}
+
+// ═════════════════════════════════════════════════════════════
+// ENGAGEMENT
+// ═════════════════════════════════════════════════════════════
+
+/// A saved restaurant or dish. Exactly one of the two targets is set.
+model Favorite {
+  id           String  @id @default(cuid())
+  userId       String  @map("user_id")
+  restaurantId String? @map("restaurant_id")
+  menuItemId   String? @map("menu_item_id")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurant Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItem   MenuItem?   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, restaurantId])
+  @@unique([userId, menuItemId])
+  @@index([restaurantId])
+  @@map("favorites")
+}
+
+/// One review per delivered order — which is what stops review spam from
+/// accounts that never ordered.
+model Review {
+  id           String  @id @default(cuid())
+  orderId      String  @unique @map("order_id")
+  userId       String  @map("user_id")
+  restaurantId String  @map("restaurant_id")
+  driverId     String? @map("driver_id")
+
+  /// Both ratings are 1–5, enforced by a CHECK constraint in the migration.
+  foodRating     Int  @map("food_rating")
+  deliveryRating Int? @map("delivery_rating")
+
+  comment   String? @db.VarChar(1000)
+  /// Lets moderation hide a review without destroying the rating history.
+  isVisible Boolean @default(true) @map("is_visible")
+
+  restaurantReply String?   @map("restaurant_reply") @db.VarChar(1000)
+  repliedAt       DateTime? @map("replied_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  order      Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  driver     Driver?    @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([restaurantId, isVisible, createdAt])
+  @@index([driverId])
+  @@index([userId])
+  @@map("reviews")
+}
+
+model Notification {
+  id      String              @id @default(cuid())
+  userId  String              @map("user_id")
+  type    NotificationType
+  channel NotificationChannel @default(IN_APP)
+
+  title String @db.VarChar(160)
+  body  String @db.VarChar(1000)
+  /// Deep-link payload, e.g. { "orderId": "..." }.
+  data  Json?
+
+  isRead Boolean   @default(false) @map("is_read")
+  readAt DateTime? @map("read_at") @db.Timestamptz(3)
+  sentAt DateTime? @map("sent_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ═════════════════════════════════════════════════════════════
+// SUPPORT & OPERATIONS
+// ═════════════════════════════════════════════════════════════
+
+model SupportTicket {
+  id           String @id @default(cuid())
+  ticketNumber String @unique @map("ticket_number") @db.VarChar(24)
+
+  userId  String  @map("user_id")
+  orderId String? @map("order_id")
+
+  category TicketCategory
+  priority TicketPriority @default(MEDIUM)
+  status   TicketStatus   @default(OPEN)
+
+  subject String @db.VarChar(200)
+
+  assignedToId String?   @map("assigned_to_id")
+  resolvedAt   DateTime? @map("resolved_at") @db.Timestamptz(3)
+  closedAt     DateTime? @map("closed_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user       User                   @relation("TicketOwner", fields: [userId], references: [id], onDelete: Cascade)
+  assignedTo User?                  @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  order      Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  messages   SupportTicketMessage[]
+
+  @@index([status, priority, createdAt])
+  @@index([userId, createdAt])
+  @@index([assignedToId, status])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id       String @id @default(cuid())
+  ticketId String @map("ticket_id")
+  senderId String @map("sender_id")
+
+  message       String  @db.VarChar(4000)
+  attachmentUrl String? @map("attachment_url") @db.VarChar(500)
+  /// Internal notes are visible to staff only, never to the customer.
+  isInternal    Boolean @default(false) @map("is_internal")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_messages")
+}
+
+/// Append-only record of consequential actions, for compliance and disputes.
+model AuditLog {
+  id         String      @id @default(cuid())
+  actorId    String?     @map("actor_id")
+  actorRole  UserRole?   @map("actor_role")
+  action     AuditAction
+  entityType String      @map("entity_type") @db.VarChar(60)
+  entityId   String?     @map("entity_id")
+
+  /// State before and after the change, for field-level diffing.
+  before Json?
+  after  Json?
+
+  ipAddress String? @map("ip_address") @db.VarChar(45)
+  userAgent String? @map("user_agent") @db.VarChar(400)
+  /// Correlates the entry with the request that produced it.
+  requestId String? @map("request_id") @db.VarChar(64)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ═════════════════════════════════════════════════════════════
+// CONTENT & CONFIGURATION
+// ═════════════════════════════════════════════════════════════
+
+model Banner {
+  id        String          @id @default(cuid())
+  title     String          @db.VarChar(160)
+  subtitle  String?         @db.VarChar(240)
+  imageUrl  String          @map("image_url") @db.VarChar(500)
+  placement BannerPlacement @default(HOME_TOP)
+
+  /// Optional targets. A banner may deep-link to a restaurant, an external
+  /// URL, or nothing at all.
+  restaurantId String? @map("restaurant_id")
+  linkUrl      String? @map("link_url") @db.VarChar(500)
+  /// Restricts display to one city. Null shows it everywhere.
+  cityId       String? @map("city_id")
+
+  sortOrder Int       @default(0) @map("sort_order")
+  startsAt  DateTime? @map("starts_at") @db.Timestamptz(3)
+  endsAt    DateTime? @map("ends_at") @db.Timestamptz(3)
+  isActive  Boolean   @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  restaurant Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: SetNull)
+  city       City?       @relation(fields: [cityId], references: [id], onDelete: Cascade)
+
+  @@index([isActive, placement, sortOrder])
+  @@index([cityId])
+  @@map("banners")
+}
+
+/// Runtime configuration editable by administrators without a deployment.
+model Setting {
+  id          String           @id @default(cuid())
+  key         String           @unique @db.VarChar(120)
+  value       String           @db.VarChar(2000)
+  valueType   SettingValueType @default(STRING) @map("value_type")
+  group       String           @default("general") @db.VarChar(60)
+  description String?          @db.VarChar(300)
+  /// Public settings are exposed to client apps; private ones never leave the API.
+  isPublic    Boolean          @default(false) @map("is_public")
+
+  updatedById String? @map("updated_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([group])
+  @@index([isPublic])
+  @@map("settings")
+}
+
+model Faq {
+  id         String  @id @default(cuid())
+  question   String  @db.VarChar(300)
+  answer     String  @db.VarChar(4000)
+  questionUr String? @map("question_ur") @db.VarChar(300)
+  answerUr   String? @map("answer_ur") @db.VarChar(4000)
+
+  category    String  @default("general") @db.VarChar(60)
+  sortOrder   Int     @default(0) @map("sort_order")
+  isPublished Boolean @default(true) @map("is_published")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([isPublished, category, sortOrder])
+  @@map("faqs")
+}

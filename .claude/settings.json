@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//tmp/**)",
+      "Bash(curl -s -o /dev/null http://localhost:3000/api/v1/health/live)",
+      "Bash(pkill -f \"node dist/main.js\")",
+      "Bash(npx jest *)",
+      "Bash(docker compose *)",
+      "Bash(echo \"DOCKER_BUILD_EXIT=$?\")",
+      "Bash(tail -30 /tmp/docker-build.log 2>/dev/null || echo \"\\(no log\\)\")"
+    ]
+  }
+}

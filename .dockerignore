@@ -1,0 +1,17 @@
+node_modules
+dist
+coverage
+.git
+.github
+.env
+.env.local
+*.log
+logs
+.idea
+.vscode
+.DS_Store
+README.md
+test
+**/*.spec.ts
+**/*.e2e-spec.ts
+.docker-data

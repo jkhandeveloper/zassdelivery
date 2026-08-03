@@ -1,0 +1,86 @@
+name: zassdelivery
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: zass_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-zass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zass_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-zassdelivery}
+      # Deterministic collation so ORDER BY is stable across host platforms.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+      TZ: ${DEFAULT_TIMEZONE:-Asia/Karachi}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-zass} -d ${POSTGRES_DB:-zassdelivery}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - zass_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: zass_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
+    ports:
+      - '${REDIS_PORT_HOST:-6379}:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - zass_network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: zass_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Container-network overrides — these win over .env values that point at localhost.
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-zass}:${POSTGRES_PASSWORD:-zass_dev_password}@postgres:5432/${POSTGRES_DB:-zassdelivery}?schema=public&connection_limit=20&pool_timeout=15
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RUN_MIGRATIONS_ON_BOOT: 'true'
+    ports:
+      - '${PORT:-3000}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - zass_network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  zass_network:
+    driver: bridge

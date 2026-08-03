@@ -1,0 +1,2 @@
+# Enforces Conventional Commits (see commitlint.config.cjs).
+npx --no -- commitlint --edit "$1"
