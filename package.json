@@ -41,11 +41,13 @@
     "@nestjs/common": "11.1.28",
     "@nestjs/config": "4.0.4",
     "@nestjs/core": "11.1.28",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "11.1.28",
     "@nestjs/swagger": "11.4.6",
     "@nestjs/terminus": "11.1.1",
     "@nestjs/throttler": "6.5.0",
     "@prisma/client": "6.19.3",
+    "argon2": "^0.45.1",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",
     "compression": "1.8.1",
@@ -90,6 +92,7 @@
     "prisma@6.19.3": true,
     "@prisma/client@6.19.3": true,
     "@prisma/engines@6.19.3": true,
-    "unrs-resolver@1.12.2": true
+    "unrs-resolver@1.12.2": true,
+    "argon2@0.45.1": true
   }
 }

@@ -8,6 +8,7 @@ import {
 } from '@nestjs/terminus';
 import { SkipThrottle } from '@nestjs/throttler';
 
+import { Public } from '@/common/decorators/public.decorator';
 import { SkipResponseWrap } from '@/common/decorators/skip-response-wrap.decorator';
 
 import { HealthCheckExceptionFilter } from './health-exception.filter';
@@ -21,6 +22,9 @@ import { RedisHealthIndicator } from './indicators/redis.health-indicator';
  */
 @ApiTags('Health')
 @Controller('health')
+// Orchestrators poll these without credentials; requiring a token would make
+// every container fail its own readiness check.
+@Public()
 @SkipThrottle()
 @SkipResponseWrap()
 @UseFilters(HealthCheckExceptionFilter)

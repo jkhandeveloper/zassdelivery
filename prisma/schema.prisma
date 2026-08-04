@@ -390,6 +390,7 @@ model User {
   couponsCreated     Coupon[]
   settingsUpdated    Setting[]
   orderStatusChanges OrderStatusHistory[]
+  refreshTokens      RefreshToken[]
 
   @@index([role, status])
   @@index([status, createdAt])
@@ -1544,4 +1545,42 @@ model Faq {
 
   @@index([isPublished, category, sortOrder])
   @@map("faqs")
+}
+
+// ═════════════════════════════════════════════════════════════
+// AUTHENTICATION
+// ═════════════════════════════════════════════════════════════
+
+/// A refresh token issued to one device/session.
+///
+/// Only the SHA-256 hash of the token is stored: a leaked database dump must
+/// not hand an attacker usable session tokens. `replacedById` links a rotated
+/// token to its successor, which is what lets us detect replay — if a token
+/// that has already been rotated is presented again, the whole chain is
+/// revoked because the token was evidently stolen.
+model RefreshToken {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+
+  /// SHA-256 of the opaque token, hex-encoded. Never the token itself.
+  tokenHash String @unique @map("token_hash") @db.VarChar(64)
+  /// Groups every token rotated from the same original login.
+  familyId  String @map("family_id")
+
+  userAgent String? @map("user_agent") @db.VarChar(400)
+  ipAddress String? @map("ip_address") @db.VarChar(45)
+
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokedReason String?   @map("revoked_reason") @db.VarChar(120)
+  replacedById  String?   @map("replaced_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
 }

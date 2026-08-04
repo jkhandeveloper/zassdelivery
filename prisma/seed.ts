@@ -26,6 +26,7 @@ import {
   WalletTransactionReason,
   WalletTransactionType,
 } from '@prisma/client';
+import * as argon2 from 'argon2';
 
 /**
  * Seeds reference data and a small but complete slice of operational data.
@@ -379,13 +380,31 @@ const USERS: UserSeed[] = [
   { phone: '+923005551236', fullName: 'Kitchen Staff', role: UserRole.VENDOR_STAFF },
 ];
 
+/**
+ * Shared development password for every seeded account, so the auth endpoints
+ * can be exercised on a fresh database. Hashed once and reused: Argon2 is
+ * deliberately slow, and hashing it per user would dominate the seed's runtime.
+ */
+const SEED_PASSWORD = 'Zass@1234';
+
 async function seedUsers(): Promise<void> {
   const verifiedAt = new Date();
+  const passwordHash = await argon2.hash(SEED_PASSWORD, {
+    type: argon2.argon2id,
+    memoryCost: 19456,
+    timeCost: 2,
+    parallelism: 1,
+  });
 
   for (const user of USERS) {
     const record = await prisma.user.upsert({
       where: { phone: user.phone },
-      update: { fullName: user.fullName, role: user.role, status: UserStatus.ACTIVE },
+      update: {
+        fullName: user.fullName,
+        role: user.role,
+        status: UserStatus.ACTIVE,
+        passwordHash,
+      },
       create: {
         phone: user.phone,
         fullName: user.fullName,
@@ -393,6 +412,7 @@ async function seedUsers(): Promise<void> {
         role: user.role,
         status: UserStatus.ACTIVE,
         phoneVerifiedAt: verifiedAt,
+        passwordHash,
       },
     });
 
@@ -416,7 +436,9 @@ async function seedUsers(): Promise<void> {
     });
   }
 
-  console.warn(`  ✓ ${USERS.length} users, each with a role assignment and wallet`);
+  console.warn(
+    `  ✓ ${USERS.length} users (password "${SEED_PASSWORD}"), each with a role assignment and wallet`,
+  );
 }
 
 async function seedAddresses(): Promise<void> {

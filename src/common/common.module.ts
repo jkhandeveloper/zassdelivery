@@ -1,8 +1,15 @@
 import { type MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerGuard } from '@nestjs/throttler';
 
+import { jwtConfig } from '@/config';
+
 import { AllExceptionsFilter } from './filters/all-exceptions.filter';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { PermissionsGuard } from './guards/permissions.guard';
+import { RolesGuard } from './guards/roles.guard';
 import { LoggingInterceptor } from './interceptors/logging.interceptor';
 import { ResponseInterceptor } from './interceptors/response.interceptor';
 import { TimeoutInterceptor } from './interceptors/timeout.interceptor';
@@ -19,6 +26,7 @@ import { RequestContextMiddleware } from './middleware/request-context.middlewar
  * any of it.
  */
 @Module({
+  imports: [ConfigModule.forFeature(jwtConfig), JwtModule.register({})],
   providers: [
     // A single exit point for every failure, including Prisma engine errors.
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
@@ -30,7 +38,14 @@ import { RequestContextMiddleware } from './middleware/request-context.middlewar
     { provide: APP_INTERCEPTOR, useClass: TimeoutInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
 
+    // Guards run in registration order. Rate limiting comes first so a flood of
+    // unauthenticated requests is rejected before any token is verified, then
+    // authentication, then the two authorisation checks — each of which needs
+    // the principal the previous guard attached.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
 })
 export class CommonModule implements NestModule {
