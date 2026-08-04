@@ -393,6 +393,7 @@ model User {
   orderStatusChanges      OrderStatusHistory[]
   refreshTokens           RefreshToken[]
   notificationPreferences NotificationPreference[]
+  cart                    Cart?
 
   @@index([role, status])
   @@index([status, createdAt])
@@ -591,6 +592,7 @@ model Address {
   city   City    @relation(fields: [cityId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   zone   Zone?   @relation(fields: [zoneId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   orders Order[]
+  carts  Cart[]
 
   @@index([userId, isDefault])
   @@index([userId, deletedAt])
@@ -707,6 +709,7 @@ model Restaurant {
   /// Declared here so migrations do not propose dropping it; it is never read
   /// through the Prisma client, only through raw SQL in the search repository.
   searchVector Unsupported("tsvector")?       @map("search_vector")
+  carts        Cart[]
 
   @@index([cityId, status])
   @@index([zoneId, status])
@@ -850,6 +853,7 @@ model MenuItem {
   orderItems   OrderItem[]
   favorites    Favorite[]
   images       MenuItemImage[]
+  cartItems    CartItem[]
 
   /// See Restaurant.searchVector.
   searchVector Unsupported("tsvector")? @map("search_vector")
@@ -883,6 +887,7 @@ model MenuVariant {
 
   menuItem   MenuItem    @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
+  cartItems  CartItem[]
 
   @@unique([menuItemId, name])
   @@index([menuItemId, sortOrder])
@@ -924,6 +929,7 @@ model AddOn {
 
   group           AddOnGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
   orderItemAddOns OrderItemAddOn[]
+  cartItemAddOns  CartItemAddOn[]
 
   @@unique([groupId, name])
   @@index([groupId, sortOrder])
@@ -1325,6 +1331,7 @@ model Coupon {
   createdBy   User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
   orders      Order[]
   redemptions CouponRedemption[]
+  carts       Cart[]
 
   @@index([isActive, startsAt, expiresAt])
   @@index([restaurantId])
@@ -1672,4 +1679,83 @@ model MenuItemImage {
 
   @@index([menuItemId, sortOrder])
   @@map("menu_item_images")
+}
+
+// ═════════════════════════════════════════════════════════════
+// CART
+// ═════════════════════════════════════════════════════════════
+
+/// A customer's working basket.
+///
+/// Stored in Postgres rather than Redis: a cart built on a phone during the
+/// commute has to still be there on the same account later, and losing it to a
+/// cache eviction is a lost order. Totals are recomputed on every read instead
+/// of being stored, so a price change upstream can never leave a stale figure
+/// sitting in the basket.
+model Cart {
+  id String @id @default(cuid())
+
+  /// One open cart per customer. Food delivery carts cannot span restaurants —
+  /// a single order goes to a single kitchen — so switching restaurants
+  /// replaces the basket rather than creating a second one.
+  userId       String  @unique @map("user_id")
+  restaurantId String  @map("restaurant_id")
+  /// Chosen at checkout; drives the delivery fee once set.
+  addressId    String? @map("address_id")
+
+  couponId   String? @map("coupon_id")
+  /// Snapshot, so the basket still shows what was applied if the coupon is renamed.
+  couponCode String? @map("coupon_code") @db.VarChar(40)
+
+  tipAmount Decimal @default(0) @map("tip_amount") @db.Decimal(10, 2)
+  notes     String? @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  /// Abandoned baskets are swept after this instant.
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  address    Address?   @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  coupon     Coupon?    @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  items      CartItem[]
+
+  @@index([restaurantId])
+  @@index([expiresAt])
+  @@map("carts")
+}
+
+model CartItem {
+  id         String  @id @default(cuid())
+  cartId     String  @map("cart_id")
+  menuItemId String  @map("menu_item_id")
+  variantId  String? @map("variant_id")
+
+  quantity Int
+  notes    String? @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  cart     Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  menuItem MenuItem        @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  variant  MenuVariant?    @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  addOns   CartItemAddOn[]
+
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+model CartItemAddOn {
+  id         String @id @default(cuid())
+  cartItemId String @map("cart_item_id")
+  addOnId    String @map("add_on_id")
+  quantity   Int    @default(1)
+
+  cartItem CartItem @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
+  addOn    AddOn    @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+
+  @@unique([cartItemId, addOnId])
+  @@map("cart_item_add_ons")
 }

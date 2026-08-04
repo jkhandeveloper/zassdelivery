@@ -6,6 +6,7 @@ import { CommonModule } from './common/common.module';
 import { configurations, throttleConfig, validateEnvironment } from './config';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { CartsModule } from './modules/carts/carts.module';
 import { MenusModule } from './modules/menus/menus.module';
 import { RestaurantsModule } from './modules/restaurants/restaurants.module';
 import { SearchModule } from './modules/search/search.module';
@@ -49,6 +50,7 @@ import { SharedModule } from './shared/shared.module';
     RestaurantsModule,
     MenusModule,
     SearchModule,
+    CartsModule,
     HealthModule,
   ],
 })

@@ -16,7 +16,7 @@ Built with NestJS 11, PostgreSQL 16 + Prisma, Redis, and TypeScript in strict mo
 | **4**     | Restaurants — registration, approval workflow, hours, radius, categories, images, search            | ✅ Complete |
 | **5**     | Menus — categories, items, variants, extra options, availability, images, inventory, bulk update    | ✅ Complete |
 | **6**     | Search — full-text, food, category, nearby, trending, popular, autocomplete, Redis cache            | ✅ Complete |
-| 7         | Cart & pricing — pricing engine, delivery fees by zone, coupons                                     | Planned     |
+| **7**     | Cart & pricing — add/remove/update, coupons, delivery fee, tax, discount, validation                | ✅ Complete |
 | 8         | Orders — lifecycle state machine, order events, cancellation                                        | Planned     |
 | 9         | Dispatch & riders (Socket.IO live tracking)                                                         | Planned     |
 | 10        | Payments — COD, wallet ledger, JazzCash/Easypaisa                                                   | Planned     |
@@ -477,11 +477,100 @@ default) — so a newly popular place can surface. **Popular** uses lifetime ord
 counts broken by rating. Ranking trending on lifetime totals would leave the
 same long-established names pinned to the top forever.
 
+### Cart — `/cart`
+
+Authenticated. Every route operates on the caller's own basket — there is no
+cart id in any path, so one customer cannot reach another's.
+
+| Method | Path              | Notes                                       |
+| ------ | ----------------- | ------------------------------------------- |
+| GET    | `/cart`           | Basket with full price breakdown and issues |
+| POST   | `/cart/items`     | Add; identical selections merge             |
+| PATCH  | `/cart/items/:id` | Update quantity; `0` removes the line       |
+| DELETE | `/cart/items/:id` | Remove a line                               |
+| DELETE | `/cart`           | Empty the basket                            |
+| POST   | `/cart/coupon`    | Apply a code                                |
+| DELETE | `/cart/coupon`    | Remove the applied coupon                   |
+| PATCH  | `/cart/address`   | Set delivery address → drives fee and ETA   |
+| PATCH  | `/cart/tip`       | Set the rider tip                           |
+| POST   | `/cart/validate`  | Pre-checkout re-check                       |
+
+#### Pricing engine
+
+`PricingService` is a **pure function** — no database, no clock, no request
+context. Checkout and the cart preview must agree to the paisa, and the only
+way to guarantee that is for both to run the same code. It is exported from
+`CartsModule` for exactly that reason.
+
+```
+total = subtotal − discount + deliveryFee + serviceFee + tax + tip
+```
+
+That formula is also the `orders_total_is_consistent` CHECK constraint, so a
+mismatch is rejected by the database rather than shipped to a customer.
+
+Decisions the engine encodes:
+
+- **Every intermediate is rounded**, not just the total. Rounding once at the
+  end lets fractional paisa drift and produces a receipt whose lines do not
+  reconcile — which the CHECK constraint would then reject.
+- **Fees are charged on the discounted basket**, not the list price. Billing a
+  service fee on money the customer never paid is indefensible on a receipt.
+- **A fixed coupon never exceeds the subtotal** — Rs. 100 off a Rs. 80 basket
+  takes 80, or the total goes negative.
+- **Percentage coupons respect `maxDiscountAmount`**, which is what stops
+  "50% off" costing more than intended on a large order.
+- **A free-delivery coupon reports zero discount when the basket already
+  qualified on its own threshold.** The coupon saved nothing; claiming
+  otherwise would inflate the "you saved" figure.
+
+Line prices are read from the **live catalogue** on every request, never stored
+on the cart — otherwise a customer could hold a stale price indefinitely.
+
+#### Delivery fee
+
+Resolved from the `delivery_fees` distance bands for the address's zone, with
+the zone's flat fee as fallback. Per-km charges apply only **beyond where the
+band starts**, so a 6.1 km trip is not billed as though all six kilometres were
+extra. The restaurant's own `deliveryRadiusMeters` is a hard limit: no band can
+make it travel further than it has said it will.
+
+#### Validation
+
+`POST /cart/validate` reports **every** problem at once with a stable code and a
+`blocking` flag, rather than throwing on the first — so a client can show
+everything that needs fixing in one pass instead of one error per round-trip.
+
+| Code                                                              | Blocking |
+| ----------------------------------------------------------------- | -------- |
+| `EMPTY_CART`, `RESTAURANT_CLOSED`, `RESTAURANT_UNAVAILABLE`       | yes      |
+| `ITEM_REMOVED`, `ITEM_UNAVAILABLE`, `VARIANT_UNAVAILABLE`         | yes      |
+| `INSUFFICIENT_STOCK` — checked against the quantity in the basket | yes      |
+| `BELOW_MINIMUM_ORDER`, `NO_ADDRESS`, `OUTSIDE_DELIVERY_AREA`      | yes      |
+| `ADDON_UNAVAILABLE` — the extra is dropped, the order proceeds    | no       |
+| `COUPON_INVALID` — reported, not silently ignored                 | no       |
+
+Gate the checkout button on **`canCheckout`**.
+
+#### Cart rules
+
+- **One basket per customer.** Adding a dish from another restaurant _replaces_
+  it — a single order cannot span two kitchens, and failing instead would leave
+  the customer in a dead end.
+- **Identical selections merge** into the existing line rather than stacking
+  duplicates the customer must then remove one by one.
+- **Option-group rules are enforced on add** — "choose a sauce" with nothing
+  chosen produces an order the kitchen cannot fulfil.
+- **Quantity `0` removes the line**, which is how a stepper reaching zero
+  behaves; emptying the basket discards the cart so the next order elsewhere
+  needs no "clear cart" prompt.
+- Baskets expire after **72 hours**, extended on every edit.
+
 ---
 
 ## Data model
 
-46 tables across ten domains. `User` and `Order` are the two hubs: almost
+49 tables across eleven domains. `User` and `Order` are the two hubs: almost
 every table reaches one of them within a single hop.
 
 ```mermaid
