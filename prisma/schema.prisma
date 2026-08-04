@@ -251,6 +251,85 @@ enum VehicleType {
   @@map("vehicle_type")
 }
 
+enum DriverDocumentType {
+  CNIC_FRONT
+  CNIC_BACK
+  DRIVING_LICENSE
+  VEHICLE_REGISTRATION
+  PROFILE_PHOTO
+
+  @@map("driver_document_type")
+}
+
+enum DriverDocumentStatus {
+  /// Uploaded, awaiting review.
+  PENDING
+  VERIFIED
+  REJECTED
+
+  @@map("driver_document_status")
+}
+
+enum AssignmentStatus {
+  /// Offered to the rider; waiting for them to accept before it expires.
+  OFFERED
+  ACCEPTED
+  REJECTED
+  /// The rider did not answer within the offer window.
+  EXPIRED
+  /// Withdrawn by dispatch, or the order itself ended.
+  CANCELLED
+  COMPLETED
+
+  @@map("assignment_status")
+}
+
+enum DriverEarningType {
+  /// Flat amount paid for taking the run at all.
+  BASE_FARE
+  /// Per-kilometre component.
+  DISTANCE
+  TIP
+  BONUS
+  ADJUSTMENT
+
+  @@map("driver_earning_type")
+}
+
+enum PayoutStatus {
+  /// Requested by the rider; the amount is already held out of their wallet.
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+  CANCELLED
+
+  @@map("payout_status")
+}
+
+enum PayoutMethod {
+  BANK_TRANSFER
+  JAZZCASH
+  EASYPAISA
+
+  @@map("payout_method")
+}
+
+enum WebhookStatus {
+  /// Stored, not yet interpreted.
+  RECEIVED
+  /// Applied: the payment moved as the callback described.
+  PROCESSED
+  /// A callback we had already applied. Recorded, then ignored.
+  DUPLICATE
+  /// Signature did not verify, or the payload made no sense.
+  INVALID
+  /// Verified, but applying it failed. Retryable.
+  FAILED
+
+  @@map("webhook_status")
+}
+
 enum NotificationType {
   ORDER_UPDATE
   PROMOTION
@@ -394,6 +473,10 @@ model User {
   refreshTokens           RefreshToken[]
   notificationPreferences NotificationPreference[]
   cart                    Cart?
+  driversApproved         Driver[]                 @relation("DriverApprover")
+  driverDocumentsReviewed DriverDocument[]         @relation("DriverDocumentReviewer")
+  assignmentsDispatched   DeliveryAssignment[]     @relation("AssignmentDispatcher")
+  payoutsProcessed        PayoutRequest[]          @relation("PayoutProcessor")
 
   @@index([role, status])
   @@index([status, createdAt])
@@ -952,6 +1035,11 @@ model Driver {
   status       DriverStatus       @default(PENDING_APPROVAL)
   availability DriverAvailability @default(OFFLINE)
 
+  /// Set when the application is rejected or the rider is suspended, and shown
+  /// to them so the decision is actionable rather than a dead end.
+  rejectionReason String? @map("rejection_reason") @db.VarChar(300)
+  approvedById    String? @map("approved_by_id")
+
   /// Home zone used to bias dispatch; a driver may still be assigned outside it.
   zoneId String? @map("zone_id")
 
@@ -959,6 +1047,10 @@ model Driver {
   currentLat     Float?    @map("current_lat")
   currentLng     Float?    @map("current_lng")
   lastLocationAt DateTime? @map("last_location_at") @db.Timestamptz(3)
+
+  /// When the current online session began. Cleared on going offline, so a
+  /// shift length is (now - onlineSince) without replaying an event log.
+  onlineSince DateTime? @map("online_since") @db.Timestamptz(3)
 
   rating          Decimal @default(0) @db.Decimal(3, 2)
   ratingCount     Int     @default(0) @map("rating_count")
@@ -974,16 +1066,163 @@ model Driver {
   updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  zone     Zone?     @relation(fields: [zoneId], references: [id], onDelete: SetNull)
-  vehicles Vehicle[]
-  orders   Order[]
-  reviews  Review[]
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy     User?                @relation("DriverApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  zone           Zone?                @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  vehicles       Vehicle[]
+  orders         Order[]
+  reviews        Review[]
+  documents      DriverDocument[]
+  assignments    DeliveryAssignment[]
+  earnings       DriverEarning[]
+  payoutRequests PayoutRequest[]
 
   @@index([status, availability])
   @@index([zoneId, availability])
   @@index([currentLat, currentLng])
   @@map("drivers")
+}
+
+/// A verification document backing a rider's application. One row per type —
+/// re-uploading replaces the file and sends it back to the review queue, so a
+/// rejected document never lingers alongside its replacement.
+model DriverDocument {
+  id       String               @id @default(cuid())
+  driverId String               @map("driver_id")
+  type     DriverDocumentType
+  status   DriverDocumentStatus @default(PENDING)
+
+  fileUrl   String    @map("file_url") @db.VarChar(500)
+  /// The number printed on the document, where it has one.
+  number    String?   @db.VarChar(60)
+  /// Licences and registrations lapse; an expired document fails approval.
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(3)
+
+  rejectionReason String?   @map("rejection_reason") @db.VarChar(300)
+  reviewedById    String?   @map("reviewed_by_id")
+  reviewedAt      DateTime? @map("reviewed_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  driver     Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  reviewedBy User?  @relation("DriverDocumentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([driverId, type])
+  @@index([status, createdAt])
+  @@map("driver_documents")
+}
+
+/// One dispatch offer: an order put in front of a rider, and what they did
+/// about it. Rejections are kept rather than deleted — they are the record of
+/// why an order sat unassigned, and they stop the dispatcher re-offering the
+/// same run to a rider who already said no.
+model DeliveryAssignment {
+  id       String           @id @default(cuid())
+  orderId  String           @map("order_id")
+  driverId String           @map("driver_id")
+  status   AssignmentStatus @default(OFFERED)
+
+  /// Straight-line distance from the rider to the restaurant when offered.
+  pickupDistanceKm Decimal? @map("pickup_distance_km") @db.Decimal(6, 2)
+  /// What the rider was told the run pays, quoted before they accept.
+  estimatedEarning Decimal  @default(0) @map("estimated_earning") @db.Decimal(10, 2)
+
+  /// Null when the auto-dispatcher made the offer.
+  assignedById String? @map("assigned_by_id")
+  isAuto       Boolean @default(false) @map("is_auto")
+
+  offeredAt       DateTime  @default(now()) @map("offered_at") @db.Timestamptz(3)
+  /// An unanswered offer must free the order for someone else.
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(3)
+  respondedAt     DateTime? @map("responded_at") @db.Timestamptz(3)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(3)
+  rejectionReason String?   @map("rejection_reason") @db.VarChar(300)
+
+  // ── Delivery confirmation code ──
+  // Hashed, never stored in clear: the plaintext goes to the customer as a
+  // notification and is only ever compared against, so a leaked database row
+  // cannot be used to close someone else's delivery.
+  otpHash       String?   @map("otp_hash") @db.VarChar(255)
+  otpIssuedAt   DateTime? @map("otp_issued_at") @db.Timestamptz(3)
+  otpAttempts   Int       @default(0) @map("otp_attempts")
+  otpVerifiedAt DateTime? @map("otp_verified_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  order      Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver     Driver          @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  assignedBy User?           @relation("AssignmentDispatcher", fields: [assignedById], references: [id], onDelete: SetNull)
+  earnings   DriverEarning[]
+
+  @@index([driverId, status, offeredAt])
+  @@index([orderId, status])
+  @@index([status, expiresAt])
+  @@map("delivery_assignments")
+}
+
+/// Append-only record of what a rider earned and why. Deliberately itemised —
+/// base fare, distance and tip are separate rows — so a rider can see how a
+/// payment was arrived at, and a dispute can be answered from the ledger.
+model DriverEarning {
+  id           String            @id @default(cuid())
+  driverId     String            @map("driver_id")
+  orderId      String?           @map("order_id")
+  assignmentId String?           @map("assignment_id")
+  type         DriverEarningType
+
+  amount      Decimal @db.Decimal(10, 2)
+  description String? @db.VarChar(300)
+
+  earnedAt  DateTime @default(now()) @map("earned_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  driver     Driver              @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  order      Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  assignment DeliveryAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+
+  @@index([driverId, earnedAt])
+  @@index([orderId])
+  @@map("driver_earnings")
+}
+
+/// A rider's request to move wallet money to their bank or mobile account.
+///
+/// The amount leaves the wallet the moment the request is made, so it cannot be
+/// spent twice while an operator is still looking at it; rejecting or
+/// cancelling the request puts it back.
+model PayoutRequest {
+  id        String @id @default(cuid())
+  /// Human-readable reference quoted in support conversations, e.g. "WDR-260809-0001".
+  reference String @unique @db.VarChar(40)
+
+  driverId String       @map("driver_id")
+  amount   Decimal      @db.Decimal(12, 2)
+  method   PayoutMethod
+  status   PayoutStatus @default(PENDING)
+
+  // Snapshot of the destination. The rider may edit their payout details
+  // later; where this transfer actually went must not change with them.
+  bankName      String? @map("bank_name") @db.VarChar(120)
+  accountTitle  String  @map("account_title") @db.VarChar(120)
+  accountNumber String  @map("account_number") @db.VarChar(40)
+
+  processedById    String?   @map("processed_by_id")
+  processedAt      DateTime? @map("processed_at") @db.Timestamptz(3)
+  rejectionReason  String?   @map("rejection_reason") @db.VarChar(300)
+  /// Bank or gateway reference once the money has actually moved.
+  paymentReference String?   @map("payment_reference") @db.VarChar(120)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  driver      Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  processedBy User?  @relation("PayoutProcessor", fields: [processedById], references: [id], onDelete: SetNull)
+
+  @@index([driverId, createdAt])
+  @@index([status, createdAt])
+  @@map("payout_requests")
 }
 
 model Vehicle {
@@ -1095,6 +1334,8 @@ model Order {
   review         Review?
   redemption     CouponRedemption?
   supportTickets SupportTicket[]
+  assignments    DeliveryAssignment[]
+  driverEarnings DriverEarning[]
 
   @@index([customerId, createdAt])
   @@index([restaurantId, status])
@@ -1188,6 +1429,11 @@ model Payment {
   amount   Decimal       @db.Decimal(10, 2)
   currency String        @default("PKR") @db.VarChar(3)
 
+  /// Our own reference for this attempt, e.g. "PAY-260810-0001". Sent to the
+  /// gateway as the merchant transaction id and echoed back on every callback,
+  /// which is how an unsolicited webhook is matched to an attempt.
+  reference String? @unique @db.VarChar(40)
+
   /// Gateway identifiers. Unique so a webhook replay cannot double-credit.
   gatewayName          String? @map("gateway_name") @db.VarChar(40)
   gatewayTransactionId String? @unique @map("gateway_transaction_id") @db.VarChar(120)
@@ -1196,20 +1442,62 @@ model Payment {
   refundedAmount Decimal @default(0) @map("refunded_amount") @db.Decimal(10, 2)
   failureReason  String? @map("failure_reason") @db.VarChar(300)
 
-  paidAt   DateTime? @map("paid_at") @db.Timestamptz(3)
-  failedAt DateTime? @map("failed_at") @db.Timestamptz(3)
+  /// When the hosted checkout stops accepting this attempt. A customer who
+  /// wanders off mid-payment must not be able to settle an hour later against
+  /// stock that has since been released.
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(3)
+  paidAt    DateTime? @map("paid_at") @db.Timestamptz(3)
+  failedAt  DateTime? @map("failed_at") @db.Timestamptz(3)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  order        Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  user         User          @relation(fields: [userId], references: [id], onDelete: Restrict)
-  transactions Transaction[]
+  order         Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  transactions  Transaction[]
+  webhookEvents WebhookEvent[]
 
   @@index([orderId, status])
   @@index([userId, createdAt])
   @@index([status, createdAt])
+  @@index([method, status])
   @@map("payments")
+}
+
+/// Every callback a payment gateway has ever sent us, verified or not.
+///
+/// Written before the payload is trusted and kept whatever the outcome: when a
+/// customer says they paid and the order says otherwise, this table is the only
+/// place that can answer what the gateway actually told us and when. It is also
+/// what makes replays free — the unique key below turns a redelivered callback
+/// into a lookup rather than a second settlement.
+model WebhookEvent {
+  id      String @id @default(cuid())
+  gateway String @db.VarChar(40)
+  /// The gateway's own identifier for this notification, or the merchant
+  /// reference when it does not send one.
+  eventId String @map("event_id") @db.VarChar(160)
+
+  status    WebhookStatus @default(RECEIVED)
+  /// Raw callback exactly as received, before any interpretation.
+  payload   Json
+  /// The signature the gateway sent, kept for after-the-fact disputes.
+  signature String?       @db.VarChar(255)
+
+  paymentId String? @map("payment_id")
+  /// Why an event was rejected or could not be applied.
+  error     String? @db.VarChar(500)
+  attempts  Int     @default(0)
+
+  receivedAt  DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt DateTime? @map("processed_at") @db.Timestamptz(3)
+
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([gateway, eventId])
+  @@index([status, receivedAt])
+  @@index([paymentId])
+  @@map("webhook_events")
 }
 
 /// Immutable double-entry-style ledger covering every movement of money:

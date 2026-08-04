@@ -38,6 +38,14 @@ function configureSwagger(
         },
         'access-token',
       )
+      .addTag('Riders', 'Rider self-service: onboarding, availability, deliveries, earnings')
+      .addTag('Rider Management', 'Approval queue, dispatch board and withdrawal queue')
+      .addTag('Payments', 'Checkout, verification, invoices and the customer’s transaction log')
+      .addTag(
+        'Payment Webhooks',
+        'Public gateway callbacks — authenticated by signature, not by token',
+      )
+      .addTag('Payment Management', 'Refunds, reconciliation, the ledger and the callback log')
       .addTag('Health', 'Liveness and readiness probes')
       .addServer(`http://localhost:${process.env.PORT ?? 3000}`, 'Local development')
       .build(),

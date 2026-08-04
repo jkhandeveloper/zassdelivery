@@ -7,7 +7,36 @@
       "Bash(npx jest *)",
       "Bash(docker compose *)",
       "Bash(echo \"DOCKER_BUILD_EXIT=$?\")",
-      "Bash(tail -30 /tmp/docker-build.log 2>/dev/null || echo \"\\(no log\\)\")"
+      "Bash(tail -30 /tmp/docker-build.log 2>/dev/null || echo \"\\(no log\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(npx ts-node *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(npm test *)",
+      "Bash(grep -i \"driver\\\\|rider\" /dev/null; npm run prisma:seed 2>&1 | grep -iE \"drivers|permissions|settings\" | head -10)",
+      "Read(//dev/**)",
+      "Bash(python3 -m json.tool)",
+      "Bash(grep -oP \"Mapped \\\\{/api/\\(cart|orders|order-management\\)[^}]*, [A-Z]+\\\\}\" /tmp/claude-1000/-var-www-zassdelivery/dee2c186-c48d-4f5b-9a54-a98fbb41d909/scratchpad/smoke.log)",
+      "Bash(chmod +x smoke.sh)",
+      "Bash(bash smoke.sh)",
+      "Bash(curl -s http://localhost:3000/api/v1/restaurants/cmsdvqesr004uzouzv3yix9uz/menu)",
+      "Bash(python3 -c ' *)",
+      "Bash(grep -oP \"Mapped \\\\{/api/[^}]*\\(menu|item\\)[^}]*, [A-Z]+\\\\}\" /tmp/claude-1000/-var-www-zassdelivery/dee2c186-c48d-4f5b-9a54-a98fbb41d909/scratchpad/smoke.log)",
+      "Bash(curl -s http://localhost:3000/api/v1/restaurants/cmsdvqesr004uzouzv3yix9uz/menu-items?limit=50)",
+      "Bash(curl -s -X POST http://localhost:3000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"phone\":\"+923001234567\",\"password\":\"Zass@1234\"}')",
+      "Bash(python3 -c \"import time;time.sleep\\(62\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/api/v1/health)",
+      "Bash(nohup node dist/main.js)",
+      "Bash(curl -s -o /dev/null -w \"health=%{http_code}\\\\n\" http://localhost:3000/api/v1/health)",
+      "Bash(curl -s http://localhost:3000/api/v1/riders/me/offers?liveOnly=true -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -s http://localhost:3000/api/v1/rider-management/assignments?status=ACCEPTED -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -s http://localhost:3000/api/v1/riders/me/withdrawals -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -s __TRACKED_VAR__/riders/me/withdrawals -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(grep -oP \"Mapped \\\\{/api/payment[^}]*, [A-Z]+\\\\}\" /tmp/claude-1000/-var-www-zassdelivery/dee2c186-c48d-4f5b-9a54-a98fbb41d909/scratchpad/pay.log)",
+      "Bash(rm -f token-*.txt)",
+      "Bash(bash pay-smoke.sh)"
+    ],
+    "additionalDirectories": [
+      "/tmp/claude-1000/-var-www-zassdelivery/dee2c186-c48d-4f5b-9a54-a98fbb41d909/scratchpad"
     ]
   }
 }

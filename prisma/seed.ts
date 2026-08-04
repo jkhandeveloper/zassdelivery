@@ -1,10 +1,14 @@
 import {
   ActorType,
   AddressLabel,
+  AssignmentStatus,
   BannerPlacement,
   CouponType,
   DayOfWeek,
   DriverAvailability,
+  DriverDocumentStatus,
+  DriverDocumentType,
+  DriverEarningType,
   DriverStatus,
   MenuItemStatus,
   NotificationChannel,
@@ -49,6 +53,9 @@ const PERMISSION_MATRIX: Record<string, string[]> = {
   orders: ['read', 'create', 'update', 'cancel', 'refund', 'assign'],
   drivers: ['read', 'create', 'update', 'approve', 'suspend'],
   payments: ['read', 'refund'],
+  /// Rider withdrawals. Separate from `payments` so a dispatcher can work the
+  /// board without also being able to move riders' money out of the platform.
+  payouts: ['read', 'approve'],
   coupons: ['read', 'create', 'update', 'delete'],
   reviews: ['read', 'moderate'],
   tickets: ['read', 'create', 'update', 'assign', 'close'],
@@ -528,9 +535,41 @@ async function seedDrivers(): Promise<void> {
         },
       });
     }
+
+    // These riders are seeded as already approved, so their paperwork has to
+    // exist and be verified — an ACTIVE rider with no documents is a state the
+    // approval workflow would never have produced.
+    for (const type of [
+      DriverDocumentType.CNIC_FRONT,
+      DriverDocumentType.CNIC_BACK,
+      DriverDocumentType.PROFILE_PHOTO,
+      DriverDocumentType.DRIVING_LICENSE,
+      DriverDocumentType.VEHICLE_REGISTRATION,
+    ]) {
+      await prisma.driverDocument.upsert({
+        where: { driverId_type: { driverId: driver.id, type } },
+        update: { status: DriverDocumentStatus.VERIFIED },
+        create: {
+          driverId: driver.id,
+          type,
+          fileUrl: `https://cdn.zassdelivery.pk/riders/${driver.id}/${type.toLowerCase()}.jpg`,
+          number: type === DriverDocumentType.CNIC_FRONT ? entry.cnic : null,
+          status: DriverDocumentStatus.VERIFIED,
+          reviewedAt: new Date(),
+        },
+      });
+    }
+
+    // Earnings land in a wallet; a rider whose wallet only appeared on their
+    // first payout would fail at the worst possible moment.
+    await prisma.wallet.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: { userId: user.id },
+    });
   }
 
-  console.warn(`  ✓ ${drivers.length} drivers with vehicles`);
+  console.warn(`  ✓ ${drivers.length} drivers with vehicles and verified documents`);
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -1097,6 +1136,94 @@ async function seedContent(): Promise<void> {
       description: 'Failed OTP attempts before lockout.',
     },
     {
+      key: 'payments.checkout_ttl_minutes',
+      value: '15',
+      valueType: SettingValueType.NUMBER,
+      group: 'payments',
+      isPublic: true,
+      description: 'How long a hosted checkout stays open before the attempt expires.',
+    },
+    {
+      key: 'payments.cod_enabled',
+      value: 'true',
+      valueType: SettingValueType.BOOLEAN,
+      group: 'payments',
+      isPublic: true,
+      description: 'Whether cash on delivery is offered. The dominant method in this market.',
+    },
+    {
+      key: 'payments.cod_max_order_amount',
+      value: '15000',
+      valueType: SettingValueType.NUMBER,
+      group: 'payments',
+      isPublic: true,
+      description: 'Largest order a rider is asked to collect in cash, in PKR.',
+    },
+    {
+      key: 'dispatch.offer_timeout_seconds',
+      value: '60',
+      valueType: SettingValueType.NUMBER,
+      group: 'dispatch',
+      isPublic: false,
+      description: 'How long a rider has to answer a delivery offer before it is passed on.',
+    },
+    {
+      key: 'dispatch.search_radius_km',
+      value: '8',
+      valueType: SettingValueType.NUMBER,
+      group: 'dispatch',
+      isPublic: false,
+      description: 'How far from the restaurant a rider may be and still be offered the run.',
+    },
+    {
+      key: 'dispatch.location_freshness_minutes',
+      value: '10',
+      valueType: SettingValueType.NUMBER,
+      group: 'dispatch',
+      isPublic: false,
+      description: 'Rider positions older than this are treated as unknown when ranking.',
+    },
+    {
+      key: 'earnings.base_fare',
+      value: '60',
+      valueType: SettingValueType.NUMBER,
+      group: 'earnings',
+      isPublic: false,
+      description: 'Flat amount a rider is paid for taking a delivery, in PKR.',
+    },
+    {
+      key: 'earnings.per_km_rate',
+      value: '18',
+      valueType: SettingValueType.NUMBER,
+      group: 'earnings',
+      isPublic: false,
+      description: 'Per-kilometre component of a rider’s delivery fare.',
+    },
+    {
+      key: 'earnings.minimum_fare',
+      value: '80',
+      valueType: SettingValueType.NUMBER,
+      group: 'earnings',
+      isPublic: false,
+      description: 'Floor on what a single delivery pays, however short the trip.',
+    },
+    {
+      key: 'earnings.tip_share_percentage',
+      value: '100',
+      valueType: SettingValueType.NUMBER,
+      group: 'earnings',
+      isPublic: false,
+      description: 'Share of the customer tip that reaches the rider. The tip is their money.',
+    },
+    {
+      key: 'payouts.min_withdrawal_amount',
+      value: '500',
+      valueType: SettingValueType.NUMBER,
+      group: 'payouts',
+      isPublic: false,
+      description: 'Smallest withdrawal a rider may request, in PKR.',
+    },
+    {
       key: 'support.phone',
       value: '+923000000000',
       valueType: SettingValueType.STRING,
@@ -1343,9 +1470,48 @@ async function seedSampleOrder(): Promise<void> {
       },
     });
 
+    // The dispatch record behind the delivery: offered, accepted, collected
+    // against a confirmation code and completed.
+    const assignment = await tx.deliveryAssignment.create({
+      data: {
+        orderId: order.id,
+        driverId: driver.id,
+        status: AssignmentStatus.COMPLETED,
+        pickupDistanceKm: 0.8,
+        estimatedEarning: 103.2,
+        isAuto: true,
+        expiresAt: new Date(deliveredAt.getTime() - 45 * 60_000),
+        respondedAt: new Date(deliveredAt.getTime() - 46 * 60_000),
+        completedAt: deliveredAt,
+        otpVerifiedAt: deliveredAt,
+      },
+    });
+
+    // Itemised at the seeded rates: base fare 60 + 2.4 km at 18/km.
+    const earningLines = [
+      { type: DriverEarningType.BASE_FARE, amount: 60, description: 'Base fare' },
+      {
+        type: DriverEarningType.DISTANCE,
+        amount: 43.2,
+        description: 'Distance — 2.4 km at Rs. 18/km',
+      },
+    ];
+    const earning = earningLines.reduce((sum, line) => sum + line.amount, 0);
+
+    await tx.driverEarning.createMany({
+      data: earningLines.map((line) => ({
+        driverId: driver.id,
+        orderId: order.id,
+        assignmentId: assignment.id,
+        type: line.type,
+        amount: line.amount,
+        description: line.description,
+        earnedAt: deliveredAt,
+      })),
+    });
+
     // Credit the rider's delivery earning to their wallet.
     const riderWallet = await tx.wallet.findUniqueOrThrow({ where: { userId: driver.userId } });
-    const earning = 60;
     await tx.wallet.update({
       where: { id: riderWallet.id },
       data: { balance: { increment: earning } },
@@ -1359,7 +1525,7 @@ async function seedSampleOrder(): Promise<void> {
         balanceAfter: Number(riderWallet.balance) + earning,
         referenceType: 'order',
         referenceId: order.id,
-        description: `Delivery earning for ${orderNumber}`,
+        description: `Delivery earnings for ${orderNumber}`,
       },
     });
 

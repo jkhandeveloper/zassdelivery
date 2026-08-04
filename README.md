@@ -17,10 +17,11 @@ Built with NestJS 11, PostgreSQL 16 + Prisma, Redis, and TypeScript in strict mo
 | **5**     | Menus — categories, items, variants, extra options, availability, images, inventory, bulk update    | ✅ Complete |
 | **6**     | Search — full-text, food, category, nearby, trending, popular, autocomplete, Redis cache            | ✅ Complete |
 | **7**     | Cart & pricing — add/remove/update, coupons, delivery fee, tax, discount, validation                | ✅ Complete |
-| 8         | Orders — lifecycle state machine, order events, cancellation                                        | Planned     |
-| 9         | Dispatch & riders (Socket.IO live tracking)                                                         | Planned     |
-| 10        | Payments — COD, wallet ledger, JazzCash/Easypaisa                                                   | Planned     |
+| **8**     | Orders — placement, lifecycle state machine, timeline, refunds, invoice, transactions               | ✅ Complete |
+| **9**     | Riders — onboarding, documents, approval, dispatch, delivery OTP, earnings, wallet, withdrawals     | ✅ Complete |
+| **10**    | Payments — COD, JazzCash, Easypaisa, verification, webhooks, refunds, invoices, ledger              | ✅ Complete |
 | 11        | Notifications, ratings, admin analytics                                                             | Planned     |
+| 12        | Live tracking over Socket.IO                                                                        | Planned     |
 
 ---
 
@@ -566,11 +567,375 @@ Gate the checkout button on **`canCheckout`**.
   needs no "clear cart" prompt.
 - Baskets expire after **72 hours**, extended on every edit.
 
+### Orders — `/orders` and `/order-management`
+
+| Method | Path                                                                 | Who                                        |
+| ------ | -------------------------------------------------------------------- | ------------------------------------------ |
+| POST   | `/orders`                                                            | Customer — checkout from cart              |
+| GET    | `/orders`                                                            | Customer — own history, always self-scoped |
+| GET    | `/orders/:id`                                                        | Any party to the order                     |
+| POST   | `/orders/:id/cancel`                                                 | Customer                                   |
+| GET    | `/orders/:id/timeline`                                               | Any party                                  |
+| GET    | `/orders/:id/transactions`                                           | Customer + staff only                      |
+| GET    | `/orders/:id/invoice`                                                | Customer + staff (not riders)              |
+| POST   | `/order-management/:id/accept` · `/reject` · `/preparing` · `/ready` | Restaurant                                 |
+| POST   | `/order-management/:id/pickup` · `/on-the-way` · `/delivered`        | Assigned rider                             |
+| PATCH  | `/order-management/:id/status`                                       | Staff escape hatch                         |
+| POST   | `/order-management/:id/refund`                                       | `payments.refund`                          |
+| GET    | `/order-management` · `/restaurants/:id` · `/drivers/:id`            | Staff / vendor / rider                     |
+
+#### Lifecycle
+
+```
+                    ┌──────────────────┐
+                    │ PENDING_PAYMENT  │
+                    └────────┬─────────┘
+                             ▼
+       ┌──── reject ──── ┌────────┐ ──── cancel ────┐
+       ▼                 │ PLACED │                 ▼
+  ┌──────────┐           └───┬────┘           ┌───────────┐
+  │ REJECTED │               │ accept         │ CANCELLED │
+  └──────────┘               ▼                └───────────┘
+                       ┌───────────┐
+                       │ CONFIRMED │
+                       └─────┬─────┘
+                             ▼  preparing
+                       ┌───────────┐   ← free customer cancellation ends here
+                       │ PREPARING │
+                       └─────┬─────┘
+                             ▼  ready
+                    ┌──────────────────┐
+                    │ READY_FOR_PICKUP │
+                    └────────┬─────────┘
+                             ▼  rider collects
+                       ┌────────────┐
+                       │ PICKED_UP  │
+                       └─────┬──────┘
+                             ▼
+                      ┌─────────────┐      ┌────────┐
+                      │ ON_THE_WAY  │ ───► │ FAILED │
+                      └──────┬──────┘      └────────┘
+                             ▼
+                       ┌───────────┐
+                       │ DELIVERED │  (terminal)
+                       └───────────┘
+```
+
+Transitions are declared as **data**, and each carries the set of actors
+permitted to make it. Both halves are enforced: the move must be legal _and_
+the caller must be entitled to it. A customer cannot mark their own order
+delivered; a rider cannot accept one for the kitchen; only the **assigned**
+rider can progress a delivery. Terminal orders never move again — corrections
+are made through refunds, which leave their own audit trail rather than
+rewriting history.
+
+`GET /orders/:id` returns `allowedTransitions` filtered to _your_ role, so a
+client renders its action buttons straight from the response.
+
+#### Placement
+
+`POST /orders` re-validates and re-prices the basket server-side; nothing about
+the total comes from the client. One transaction writes the order, its lines and
+add-ons, the opening timeline entry, the payment row, **stock decrements**,
+coupon accounting, and clears the cart. A half-written order is worse than a
+failed checkout, because nobody can tell what the customer actually bought.
+
+Stock is claimed with a conditional `UPDATE ... WHERE stock_quantity >= n`
+inside that same transaction, so two simultaneous checkouts cannot both take the
+last unit — the loser's whole order rolls back.
+
+Order numbers (`ZD-260804-0001`) come from a Postgres **sequence**, not a row
+count: two checkouts in the same millisecond would otherwise compute the same
+number and one would fail at random on the unique index.
+
+#### Money
+
+- **Cash on delivery** is recorded `PENDING` and settles the moment the order is
+  marked delivered — that is when the rider actually collects it.
+- **Wallet** payments debit inside the placement transaction; an insufficient
+  balance rolls the order back rather than leaving one nobody paid for.
+- **Commission** is taken on the food value alone. A cut of the delivery fee,
+  service fee or tip would bill the kitchen for money it never sees.
+- **Refunds are additive**, not a status change: a delivered order stays
+  delivered. Partial refunds accumulate, can never exceed what was paid, and
+  credit the customer's wallet with a matching ledger entry.
+
+#### Stock restoration
+
+Returned only when the order ends before the kitchen committed — `PENDING_PAYMENT`,
+`PLACED` or `CONFIRMED`. Once cooking has started the ingredients are gone, and
+restocking would overstate what is actually available.
+
+---
+
+### Riders — `/riders` and `/rider-management`
+
+Rider self-service. Every route resolves the rider from the access token rather
+than from a path parameter, so there is no id a caller could swap to reach
+someone else's offers, earnings or wallet.
+
+| Method | Path                                         | Who                                    |
+| ------ | -------------------------------------------- | -------------------------------------- |
+| POST   | `/riders/register`                           | Signed-in rider — opens an application |
+| GET    | `/riders/me`                                 | Own profile + document checklist       |
+| PATCH  | `/riders/me`                                 | Licence, zone, payout details          |
+| POST   | `/riders/me/resubmit`                        | Rejected applicant, back to the queue  |
+| GET    | `/riders/me/documents`                       | Own documents and review state         |
+| PUT    | `/riders/me/documents`                       | Upload or replace one document         |
+| PATCH  | `/riders/me/availability`                    | Online · offline · on break            |
+| PUT    | `/riders/me/location`                        | Position ping (204, no body)           |
+| GET    | `/riders/me/offers`                          | `liveOnly=true` for the inbox          |
+| POST   | `/riders/me/offers/:id/accept` · `/reject`   | Answer an offer                        |
+| GET    | `/riders/me/deliveries` · `/:orderId`        | History, and the run in hand           |
+| POST   | `/riders/me/deliveries/:orderId/pickup`      | Collect + issue the delivery code      |
+| POST   | `/riders/me/deliveries/:orderId/on-the-way`  | Leave the restaurant                   |
+| POST   | `/riders/me/deliveries/:orderId/confirm`     | Close the delivery against the code    |
+| GET    | `/riders/me/earnings` · `/earnings/summary`  | Itemised ledger, and the headline      |
+| GET    | `/riders/me/wallet` · `/wallet/transactions` | Balance and statement                  |
+| POST   | `/riders/me/withdrawals`                     | Request a payout                       |
+| GET    | `/riders/me/withdrawals`                     | Own withdrawal history                 |
+| POST   | `/riders/me/withdrawals/:id/cancel`          | While still pending                    |
+
+Operator side, guarded by permission rather than role — a dispatcher can hold
+`orders.assign` without also being able to approve riders or move their money.
+
+| Method | Path                                                              | Permission        |
+| ------ | ----------------------------------------------------------------- | ----------------- |
+| GET    | `/rider-management/riders` · `/riders/:id` · `/:id/documents`     | `drivers.read`    |
+| POST   | `/rider-management/riders/:id/approve` · `/reject`                | `drivers.approve` |
+| POST   | `/rider-management/riders/:id/suspend` · `/reinstate`             | `drivers.suspend` |
+| POST   | `/rider-management/documents/:id/verify` · `/reject`              | `drivers.approve` |
+| POST   | `/rider-management/orders/:orderId/assign`                        | `orders.assign`   |
+| GET    | `/rider-management/assignments` · `/riders/:id/assignments`       | `orders.read`     |
+| POST   | `/rider-management/assignments/:id/cancel` · `/expire`            | `orders.assign`   |
+| GET    | `/rider-management/withdrawals`                                   | `payouts.read`    |
+| POST   | `/rider-management/withdrawals/:id/approve` · `/paid` · `/reject` | `payouts.approve` |
+
+#### Onboarding
+
+```
+  register ──► PENDING_APPROVAL ──approve──► ACTIVE ──suspend──► SUSPENDED
+                    ▲     │                                          │
+                    │     └──reject──► REJECTED ──┐                  │
+                    └──── resubmit ───────────────┘                  │
+                    ACTIVE ◄──────────── reinstate ───────────────────┘
+```
+
+Approval is blocked until every required document is **verified and current**.
+Identity (CNIC front and back) and a profile photo are always required; a
+licence and vehicle registration are required too, unless the rider is on foot
+or on a bicycle and has nothing to register. Re-uploading a document replaces
+the file and sends it back to the queue — a rejected document can never be
+laundered into a verified one by uploading it again.
+
+Approval is a snapshot, so it is re-checked over time: a rider whose licence has
+lapsed since is refused when they try to go online, and a suspension cannot be
+lifted without the paperwork being current again.
+
+#### Dispatch
+
+Dispatch may begin as soon as the restaurant **confirms**, not when the food is
+ready — a rider riding to the kitchen while it cooks is the difference between a
+30-minute delivery and a 45-minute one.
+
+What the dispatcher produces is an **offer**, not an assignment. The rider still
+has to accept: an order pushed onto someone who has gone home only _looks_
+handled, which is worse than an unassigned one. Ranking is straight-line
+distance first (60), home zone second (25), rating last (15) — rating is the
+tiebreak rather than a headline factor, so dispatch does not starve a new rider
+of work before they have a record. A rider whose position is stale still ranks,
+below anyone we can actually locate; a rider who has already declined this order
+does not.
+
+Customer contact details are withheld from an offer and released only on
+acceptance. An offer goes to whoever is nearby, and a rider who declines has no
+business keeping the customer's phone number.
+
+Three partial unique indexes carry the concurrency guarantees, because two
+dispatchers clicking at the same instant both pass every application-level check:
+one live assignment per order, one accepted assignment per rider, and no
+duplicate open offer of the same order to the same rider.
+
+#### Delivery OTP
+
+Collecting the order issues a four-digit code. The plaintext goes to the
+customer as a notification and is then forgotten; the assignment stores only a
+salted hash, so a leaked database row cannot close someone else's delivery.
+
+The code is what makes "delivered" mean something — without it a rider can mark
+an order complete from the end of the street, and the only party who can dispute
+it is the customer who never got their food. It is enforced at the single choke
+point every lifecycle move passes through, so the generic
+`POST /order-management/:id/delivered` refuses a rider without it rather than
+offering a way around. Five wrong codes burn it, and every failed attempt is
+counted even though the request failed — an uncounted wrong guess is an
+unlimited one.
+
+#### Earnings and payouts
+
+A completed delivery is paid **itemised**: base fare, distance and tip are
+separate ledger rows, so "why was this run only 90 rupees" is answerable from
+the record instead of by recomputing history. A fare floor tops short runs up
+without hiding what the base and distance came to. The tip is passed through as
+its own line — it is the customer's money, not the platform's — and is
+deliberately left out of the quote a rider sees before accepting, because a
+customer can still change it.
+
+The order is closed before the money moves: if the payout fails, the delivery is
+still recorded, and an unpaid earning is a support ticket rather than a customer
+whose order is stuck `ON_THE_WAY` forever. Crediting is idempotent on the order,
+so a rider tapping twice on a bad connection is not paid twice.
+
+A withdrawal debits the wallet the moment it is requested, so the money cannot
+be spent while an operator is still deciding; rejecting or cancelling puts it
+back with a matching ledger entry. Approval and payment are separate steps —
+they happen at different times and by different hands, and collapsing them would
+record money as sent before anyone had sent it. References (`WDR-260810-0001`)
+come from a Postgres sequence, for the same reason order numbers do.
+
+---
+
+### Payments — `/payments`, `/payment-webhooks` and `/payment-management`
+
+| Method | Path                                        | Who                                    |
+| ------ | ------------------------------------------- | -------------------------------------- |
+| GET    | `/payments/methods`                         | What this deployment can actually take |
+| POST   | `/payments/orders/:orderId/checkout`        | Customer — start paying                |
+| POST   | `/payments/:id/verify`                      | Customer — did it go through?          |
+| POST   | `/payments/:id/cancel`                      | Customer — abandon an attempt          |
+| GET    | `/payments` · `/payments/:id`               | Customer — own attempts                |
+| GET    | `/payments/transactions`                    | Customer — own ledger                  |
+| GET    | `/payments/invoices` · `/invoices/:orderId` | Customer — own invoices                |
+| GET    | `/payments/orders/:orderId/transactions`    | Money moved against one order          |
+| POST   | `/payment-webhooks/jazzcash` · `/easypaisa` | **Public** — the gateways              |
+
+Staff routes are permission-split: `payments.read` is enough to investigate a
+complaint, `payments.refund` is what it takes to move money.
+
+| Method | Path                                                          | Permission        |
+| ------ | ------------------------------------------------------------- | ----------------- |
+| GET    | `/payment-management/payments` · `/payments/outstanding-cash` | `payments.read`   |
+| POST   | `/payment-management/payments/:id/refund`                     | `payments.refund` |
+| POST   | `/payment-management/payments/:id/mark-collected` · `/fail`   | `payments.refund` |
+| POST   | `/payment-management/payments/expire`                         | `payments.refund` |
+| GET    | `/payment-management/transactions` · `/transactions/summary`  | `payments.read`   |
+| GET    | `/payment-management/invoices` · `/invoices/:orderId`         | `payments.read`   |
+| GET    | `/payment-management/webhooks`                                | `payments.read`   |
+| POST   | `/payment-management/webhooks/:id/replay`                     | `payments.refund` |
+
+#### Two ways an order gets paid for
+
+```
+  cash / wallet                       JazzCash / Easypaisa
+  ─────────────                       ────────────────────
+  POST /orders                        POST /orders
+       │ settles in-house                  │ nothing settles yet
+       ▼                                   ▼
+    PLACED  ──► the kitchen           PENDING_PAYMENT  (stock held, kitchen silent)
+                                           │  POST /payments/orders/:id/checkout
+                                           ▼
+                                     signed form fields ──► hosted gateway page
+                                           │
+                            ┌──────────────┴──────────────┐
+                            ▼                             ▼
+                  POST /payment-webhooks/…      POST /payments/:id/verify
+                            └──────────────┬──────────────┘
+                                           ▼
+                                    settlement (one transaction)
+                                           │
+                                           ▼
+                                        PLACED  ──► the kitchen
+```
+
+Cash and wallet settle where they always did — nothing about those paths
+changed. A gateway order is held in `PENDING_PAYMENT` instead, because sending a
+ticket to a restaurant for a payment that may never complete is how food gets
+cooked for nobody. The stock is still claimed at checkout and released when the
+attempt expires.
+
+#### Settlement
+
+Three things can report a payment: a webhook, the customer's browser coming
+back, and us asking the provider. All three run through **one** settlement
+service, because three copies of this logic would eventually disagree, and the
+disagreement would be about whether somebody had paid.
+
+Settlement is a single transaction: the payment, the order it unblocks, the
+timeline entry, the ledger row and the commission all move together. A payment
+marked `PAID` against an order still sitting in `PENDING_PAYMENT` is the worst
+state this module could produce — the customer has been charged and the kitchen
+has been told nothing.
+
+It is idempotent, and it checks the amount before crediting anything. A gateway
+reporting less than the order is worth is either a partial capture or a tampered
+callback; neither quietly releases an order.
+
+#### Webhooks
+
+Public by necessity — a gateway has no bearer token — so nothing there trusts the
+caller. Authentication is the payload's own signature.
+
+The payload is **stored before it is trusted or even understood**. The most
+expensive failure in payments is not a bad callback; it is a callback nobody can
+prove arrived. Everything after that step is allowed to fail, because the
+evidence is already on disk and `POST /payment-management/webhooks/:id/replay`
+can apply it again once whatever broke is fixed.
+
+Redelivery is normal traffic, not an error: the unique key on
+`(gateway, event_id)` turns a repeated callback into a lookup, and the endpoint
+answers 200 so the gateway does not escalate a delivery it has in fact made.
+
+The two providers differ in one way that matters. **JazzCash** signs its callback
+with an HMAC over the same field set it expects on the request, so a verified
+callback settles directly. **Easypaisa** does not sign its browser return at all
+— anyone could type that query string into an address bar — so nothing settles on
+it. The result is marked untrusted and confirmed with Easypaisa over TLS before a
+rupee moves.
+
+#### Refunds
+
+Additive rather than a reversal: the original payment is never rewritten and the
+correction lives in the ledger. Partial refunds accumulate and can never exceed
+what was taken.
+
+`destination=SOURCE` returns money the way it arrived. When the gateway refuses,
+or holds no credentials here, or the order was cash and there is no instrument to
+return to, the wallet takes it instead — and the response says which way it
+actually went and why. A refund that silently went somewhere else is worse than
+one that did not happen. A gateway refund is recorded `PENDING` until the
+provider confirms it, because a refund accepted is not a refund made.
+
+#### Invoices
+
+Two documents, deliberately. `GET /orders/:id/invoice` is the customer's copy:
+what was ordered and what it cost. `GET /payments/invoices/:orderId` is the
+settlement view: every attempt including the failed ones, gateway references, and
+each refund. The second is what a finance team reconciles against a bank
+statement and what support opens when a customer says the money left their
+account. `amountDue` on it is exactly the figure a rider needs at the door.
+
+#### Gateway credentials
+
+Both gateways are optional and unconfigured by default. An unconfigured provider
+reports itself unavailable through `GET /payments/methods`, so a checkout screen
+greys it out rather than failing after the customer has committed to paying — and
+cash and wallet keep working regardless. Fill in `JAZZCASH_*` / `EASYPAISA_*` and
+set `PUBLIC_BASE_URL` to something a gateway can actually reach; it cannot call
+`localhost`.
+
+> The two adapters are written against the providers' documented sandbox
+> contracts. The signing, verification, settlement and refund paths are covered
+> by tests, and the full flow — signed checkout, forged callback rejected, real
+> callback settled, redelivery deduplicated, refund, ledger — has been exercised
+> end to end against the running API with a simulated gateway. What has **not**
+> been exercised is a live merchant account, which no test can stand in for:
+> expect to adjust field names and response codes during first integration.
+
 ---
 
 ## Data model
 
-49 tables across eleven domains. `User` and `Order` are the two hubs: almost
+55 tables across eleven domains. `User` and `Order` are the two hubs: almost
 every table reaches one of them within a single hop.
 
 ```mermaid
@@ -600,7 +965,13 @@ erDiagram
     ADD_ON_GROUP ||--o{ ADD_ON : "contains"
 
     DRIVER ||--o{ VEHICLE : "drives"
+    DRIVER ||--o{ DRIVER_DOCUMENT : "files"
+    DRIVER ||--o{ DELIVERY_ASSIGNMENT : "offered"
+    DRIVER ||--o{ DRIVER_EARNING : "earns"
+    DRIVER ||--o{ PAYOUT_REQUEST : "withdraws"
     DRIVER ||--o{ ORDER : "delivers"
+    ORDER ||--o{ DELIVERY_ASSIGNMENT : "dispatched by"
+    DELIVERY_ASSIGNMENT ||--o{ DRIVER_EARNING : "pays"
     RESTAURANT ||--o{ ORDER : "fulfils"
 
     ORDER ||--|{ ORDER_ITEM : "contains"
@@ -608,6 +979,7 @@ erDiagram
     ORDER ||--o{ ORDER_STATUS_HISTORY : "trail"
     ORDER ||--o{ PAYMENT : "paid by"
     PAYMENT ||--o{ TRANSACTION : "ledger"
+    PAYMENT ||--o{ WEBHOOK_EVENT : "reported by"
     ORDER ||--o| REVIEW : "rated by"
     ORDER ||--o| COUPON_REDEMPTION : "used"
     COUPON ||--o{ COUPON_REDEMPTION : "redeemed"
@@ -622,18 +994,18 @@ erDiagram
 
 ### Domains
 
-| Domain            | Tables                                                                                                             |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Identity & access | `users`, `roles`, `permissions`, `role_permissions`, `user_role_assignments`                                       |
-| Geography         | `cities`, `zones`, `delivery_fees`, `addresses`                                                                    |
-| Restaurants       | `restaurants`, `restaurant_categories`, `restaurant_category_assignments`, `restaurant_images`, `restaurant_hours` |
-| Menu              | `menus`, `menu_categories`, `menu_items`, `menu_variants`, `add_on_groups`, `add_ons`                              |
-| Delivery          | `drivers`, `vehicles`                                                                                              |
-| Orders            | `orders`, `order_items`, `order_item_add_ons`, `order_status_history`                                              |
-| Money             | `payments`, `transactions`, `wallets`, `wallet_transactions`, `coupons`, `coupon_redemptions`                      |
-| Engagement        | `favorites`, `reviews`, `notifications`                                                                            |
-| Operations        | `support_tickets`, `support_ticket_messages`, `audit_logs`                                                         |
-| Content           | `banners`, `settings`, `faqs`                                                                                      |
+| Domain            | Tables                                                                                                                                                |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity & access | `users`, `roles`, `permissions`, `role_permissions`, `user_role_assignments`                                                                          |
+| Geography         | `cities`, `zones`, `delivery_fees`, `addresses`                                                                                                       |
+| Restaurants       | `restaurants`, `restaurant_categories`, `restaurant_category_assignments`, `restaurant_images`, `restaurant_hours`                                    |
+| Menu              | `menus`, `menu_categories`, `menu_items`, `menu_variants`, `add_on_groups`, `add_ons`                                                                 |
+| Delivery          | `drivers`, `vehicles`, `driver_documents`, `delivery_assignments`                                                                                     |
+| Orders            | `orders`, `order_items`, `order_item_add_ons`, `order_status_history`                                                                                 |
+| Money             | `payments`, `transactions`, `wallets`, `wallet_transactions`, `coupons`, `coupon_redemptions`, `driver_earnings`, `payout_requests`, `webhook_events` |
+| Engagement        | `favorites`, `reviews`, `notifications`                                                                                                               |
+| Operations        | `support_tickets`, `support_ticket_messages`, `audit_logs`                                                                                            |
+| Content           | `banners`, `settings`, `faqs`                                                                                                                         |
 
 ### Design rules
 
@@ -671,6 +1043,13 @@ language cannot express them:
   partial _unique_ indexes for one default address per user and one primary
   vehicle per driver.
 
+`20260809000000_rider_dispatch_documents_and_payouts` adds the dispatch
+guarantees in the same style — one live assignment per order, one accepted
+assignment per rider, no duplicate open offer, one withdrawal in flight per
+rider — as partial unique indexes, plus the `payout_reference_seq` sequence.
+These are the constraints that must hold when two dispatchers click at the same
+moment, which is exactly when application-level checks do not.
+
 > Prisma cannot represent trigram indexes in the datamodel, so `migrate diff`
 > proposes dropping them on every run. Strip those `DROP INDEX` lines when
 > generating a new migration.
@@ -679,16 +1058,17 @@ language cannot express them:
 
 | Phone           | Role                                                    |
 | --------------- | ------------------------------------------------------- |
-| `+923000000001` | `SUPER_ADMIN` (all 51 permissions)                      |
+| `+923000000001` | `SUPER_ADMIN` (all 53 permissions)                      |
 | `+923000000002` | `ADMIN`                                                 |
 | `+923001234567` | `CUSTOMER` — default Pabbi address, one delivered order |
-| `+923009876543` | `RIDER` — motorcycle `PES-4821`                         |
+| `+923009876543` | `RIDER` — motorcycle `PES-4821`, documents verified     |
 | `+923005551234` | `VENDOR_OWNER` — Chapli Kabab House                     |
 
-Also seeded: 6 roles · 51 permissions · 3 cities · 9 zones · 27 delivery-fee
-bands · 3 restaurants with menus · 10 menu items · 3 coupons · 10 settings ·
-5 FAQs · and one fully delivered order with its payment, ledger entries, wallet
-movement, review and notification.
+Also seeded: 6 roles · 53 permissions · 3 cities · 9 zones · 27 delivery-fee
+bands · 3 restaurants with menus · 10 menu items · 3 coupons · 21 settings ·
+5 FAQs · 2 approved riders with verified documents · and one fully delivered
+order with its payment, ledger entries, dispatch assignment, itemised rider
+earnings, wallet movements, review and notification.
 
 The seed is idempotent — every write is an upsert on a natural key.
 

@@ -152,6 +152,56 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   SWAGGER_PATH: string = 'docs';
 
+  // ── Payments ──
+  // Gateway credentials are issued per merchant and are absent in development,
+  // so every one of them is optional. An unconfigured gateway reports itself
+  // unavailable at checkout; it never fails at the point of payment.
+  @IsString()
+  @Matches(/^https?:\/\//, { message: 'PUBLIC_BASE_URL must be an absolute http(s) URL' })
+  PUBLIC_BASE_URL: string = 'http://localhost:3000';
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  PAYMENT_CHECKOUT_TTL_MINUTES: number = 15;
+
+  @IsOptional()
+  @IsString()
+  JAZZCASH_MERCHANT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  JAZZCASH_PASSWORD?: string;
+
+  @IsOptional()
+  @IsString()
+  JAZZCASH_INTEGRITY_SALT?: string;
+
+  @IsOptional()
+  @IsString()
+  JAZZCASH_CHECKOUT_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  JAZZCASH_API_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  EASYPAISA_STORE_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  EASYPAISA_HASH_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  EASYPAISA_CHECKOUT_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  EASYPAISA_API_URL?: string;
+
   // ── Market defaults ──
   @IsString()
   @Matches(/^\+\d{1,4}$/, { message: 'DEFAULT_COUNTRY_CODE must look like "+92"' })
