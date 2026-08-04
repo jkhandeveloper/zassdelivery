@@ -8,6 +8,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { MenusModule } from './modules/menus/menus.module';
 import { RestaurantsModule } from './modules/restaurants/restaurants.module';
+import { SearchModule } from './modules/search/search.module';
 import { UsersModule } from './modules/users/users.module';
 import { SharedModule } from './shared/shared.module';
 
@@ -47,6 +48,7 @@ import { SharedModule } from './shared/shared.module';
     UsersModule,
     RestaurantsModule,
     MenusModule,
+    SearchModule,
     HealthModule,
   ],
 })

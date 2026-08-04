@@ -689,20 +689,24 @@ model Restaurant {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  owner      User                           @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  approvedBy User?                          @relation("RestaurantApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  city       City                           @relation(fields: [cityId], references: [id], onDelete: Restrict)
-  zone       Zone                           @relation(fields: [zoneId], references: [id], onDelete: Restrict)
-  categories RestaurantCategoryAssignment[]
-  images     RestaurantImage[]
-  hours      RestaurantHour[]
-  menus      Menu[]
-  menuItems  MenuItem[]
-  orders     Order[]
-  reviews    Review[]
-  favorites  Favorite[]
-  coupons    Coupon[]
-  banners    Banner[]
+  owner        User                           @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  approvedBy   User?                          @relation("RestaurantApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  city         City                           @relation(fields: [cityId], references: [id], onDelete: Restrict)
+  zone         Zone                           @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  categories   RestaurantCategoryAssignment[]
+  images       RestaurantImage[]
+  hours        RestaurantHour[]
+  menus        Menu[]
+  menuItems    MenuItem[]
+  orders       Order[]
+  reviews      Review[]
+  favorites    Favorite[]
+  coupons      Coupon[]
+  banners      Banner[]
+  /// Full-text search vector, maintained by Postgres as a generated column.
+  /// Declared here so migrations do not propose dropping it; it is never read
+  /// through the Prisma client, only through raw SQL in the search repository.
+  searchVector Unsupported("tsvector")?       @map("search_vector")
 
   @@index([cityId, status])
   @@index([zoneId, status])
@@ -711,6 +715,7 @@ model Restaurant {
   @@index([rating])
   @@index([deletedAt])
   @@index([status, createdAt])
+  @@index([searchVector], type: Gin)
   @@map("restaurants")
 }
 
@@ -846,10 +851,14 @@ model MenuItem {
   favorites    Favorite[]
   images       MenuItemImage[]
 
+  /// See Restaurant.searchVector.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+
   @@index([restaurantId, status])
   @@index([menuCategoryId, sortOrder])
   @@index([status, isFeatured])
   @@index([deletedAt])
+  @@index([searchVector], type: Gin)
   @@map("menu_items")
 }
 

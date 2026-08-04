@@ -15,11 +15,12 @@ Built with NestJS 11, PostgreSQL 16 + Prisma, Redis, and TypeScript in strict mo
 | **3**     | Users — admin CRUD, profile, addresses, favorites, notification preferences                         | ✅ Complete |
 | **4**     | Restaurants — registration, approval workflow, hours, radius, categories, images, search            | ✅ Complete |
 | **5**     | Menus — categories, items, variants, extra options, availability, images, inventory, bulk update    | ✅ Complete |
-| 6         | Cart & pricing — pricing engine, delivery fees by zone, coupons                                     | Planned     |
-| 7         | Orders — lifecycle state machine, order events, cancellation                                        | Planned     |
-| 8         | Dispatch & riders (Socket.IO live tracking)                                                         | Planned     |
-| 9         | Payments — COD, wallet ledger, JazzCash/Easypaisa                                                   | Planned     |
-| 10        | Notifications, ratings, admin analytics                                                             | Planned     |
+| **6**     | Search — full-text, food, category, nearby, trending, popular, autocomplete, Redis cache            | ✅ Complete |
+| 7         | Cart & pricing — pricing engine, delivery fees by zone, coupons                                     | Planned     |
+| 8         | Orders — lifecycle state machine, order events, cancellation                                        | Planned     |
+| 9         | Dispatch & riders (Socket.IO live tracking)                                                         | Planned     |
+| 10        | Payments — COD, wallet ledger, JazzCash/Easypaisa                                                   | Planned     |
+| 11        | Notifications, ratings, admin analytics                                                             | Planned     |
 
 ---
 
@@ -405,6 +406,76 @@ instead of editing twenty dishes mid-service.
   `minSelect ≥ 1`), and a required group cannot be emptied — either would make
   checkout impossible.
 - A dish can only be moved to a section of the **same** restaurant.
+
+### Search — `/search`
+
+Public discovery. All results are cached in Redis; a Redis outage degrades
+these to direct database reads rather than failing the request.
+
+| Method | Path                   | Cache TTL | Notes                                           |
+| ------ | ---------------------- | --------- | ----------------------------------------------- |
+| GET    | `/search`              | 2 min     | Global: 5 restaurants + 5 dishes + 5 categories |
+| GET    | `/search/restaurants`  | 2 min     | Full-text, ranked                               |
+| GET    | `/search/food`         | 2 min     | Full-text across all restaurants                |
+| GET    | `/search/categories`   | 1 hr      | Ordered by active restaurant count              |
+| GET    | `/search/nearby`       | 1 min     | Nearest first, radius-aware                     |
+| GET    | `/search/trending`     | 15 min    | Delivered orders in a rolling window            |
+| GET    | `/search/popular`      | 30 min    | Lifetime order counts                           |
+| GET    | `/search/autocomplete` | 5 min     | Type-ahead, trigram-matched                     |
+
+#### PostgreSQL full-text search
+
+`restaurants` and `menu_items` each carry a `search_vector` **generated column**
+with a GIN index:
+
+```sql
+setweight(to_tsvector('simple', name),        'A') ||
+setweight(to_tsvector('simple', name_ur),     'A') ||
+setweight(to_tsvector('simple', description), 'B')
+```
+
+Three decisions worth knowing:
+
+- **Generated, not trigger-maintained.** Postgres recomputes the vector on every
+  write, so it cannot drift out of sync the way a forgotten trigger or an
+  application-side update would.
+- **`'simple'`, not `'english'`.** The vocabulary is transliterated Urdu and
+  Pashto — _karahi_, _chapli_, _seekh_, _biryani_. English stemming mangles
+  those. `'simple'` just lower-cases and splits.
+- **Weighted A/B.** A term matching a name outranks one that merely appears in a
+  description.
+
+Queries go through **`websearch_to_tsquery`**, so `"chapli kabab" -pizza` works
+as written and malformed input (`&&||!`) returns results instead of a 500 —
+`to_tsquery` would throw.
+
+`ts_rank` is returned as `relevance` on every hit, and is `0` when the request
+carried no search term (browsing falls back to featured → rating).
+
+#### Autocomplete
+
+Deliberately **not** full-text: a half-typed word is not a lexeme, and `tsquery`
+matches whole ones. Suggestions use trigram similarity instead, which also
+tolerates phone-keyboard typos — `kabb` still returns the Kabab dishes. An exact
+prefix scores `1` so it ranks above fuzzy matches. Results mix restaurants,
+dishes and categories in one list.
+
+#### Geo
+
+Supplying `latitude` + `longitude` limits results to restaurants that can
+genuinely deliver there: the effective radius is `LEAST(requested,
+restaurant.deliveryRadiusMeters)`. Coordinates must be sent as a pair — one
+without the other is rejected rather than silently ignored.
+
+`/search/nearby` rounds its cache key to ~100 m, so customers a few metres apart
+share one entry instead of minting thousands of near-identical keys.
+
+#### Trending vs popular
+
+**Trending** counts _delivered_ orders inside a rolling window (7 days by
+default) — so a newly popular place can surface. **Popular** uses lifetime order
+counts broken by rating. Ranking trending on lifetime totals would leave the
+same long-established names pinned to the top forever.
 
 ---
 
