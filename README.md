@@ -17,7 +17,7 @@ Built with NestJS 11, PostgreSQL 16 + Prisma, Redis, and TypeScript in strict mo
 | **5**     | Menus — categories, items, variants, extra options, availability, images, inventory, bulk update    | ✅ Complete |
 | **6**     | Search — full-text, food, category, nearby, trending, popular, autocomplete, Redis cache            | ✅ Complete |
 | **7**     | Cart & pricing — add/remove/update, coupons, delivery fee, tax, discount, validation                | ✅ Complete |
-| 8         | Orders — lifecycle state machine, order events, cancellation                                        | Planned     |
+| **8**     | Orders — placement, lifecycle state machine, timeline, refunds, invoice, transactions               | ✅ Complete |
 | 9         | Dispatch & riders (Socket.IO live tracking)                                                         | Planned     |
 | 10        | Payments — COD, wallet ledger, JazzCash/Easypaisa                                                   | Planned     |
 | 11        | Notifications, ratings, admin analytics                                                             | Planned     |
@@ -565,6 +565,105 @@ Gate the checkout button on **`canCheckout`**.
   behaves; emptying the basket discards the cart so the next order elsewhere
   needs no "clear cart" prompt.
 - Baskets expire after **72 hours**, extended on every edit.
+
+### Orders — `/orders` and `/order-management`
+
+| Method | Path                                                                 | Who                                        |
+| ------ | -------------------------------------------------------------------- | ------------------------------------------ |
+| POST   | `/orders`                                                            | Customer — checkout from cart              |
+| GET    | `/orders`                                                            | Customer — own history, always self-scoped |
+| GET    | `/orders/:id`                                                        | Any party to the order                     |
+| POST   | `/orders/:id/cancel`                                                 | Customer                                   |
+| GET    | `/orders/:id/timeline`                                               | Any party                                  |
+| GET    | `/orders/:id/transactions`                                           | Customer + staff only                      |
+| GET    | `/orders/:id/invoice`                                                | Customer + staff (not riders)              |
+| POST   | `/order-management/:id/accept` · `/reject` · `/preparing` · `/ready` | Restaurant                                 |
+| POST   | `/order-management/:id/pickup` · `/on-the-way` · `/delivered`        | Assigned rider                             |
+| PATCH  | `/order-management/:id/status`                                       | Staff escape hatch                         |
+| POST   | `/order-management/:id/refund`                                       | `payments.refund`                          |
+| GET    | `/order-management` · `/restaurants/:id` · `/drivers/:id`            | Staff / vendor / rider                     |
+
+#### Lifecycle
+
+```
+                    ┌──────────────────┐
+                    │ PENDING_PAYMENT  │
+                    └────────┬─────────┘
+                             ▼
+       ┌──── reject ──── ┌────────┐ ──── cancel ────┐
+       ▼                 │ PLACED │                 ▼
+  ┌──────────┐           └───┬────┘           ┌───────────┐
+  │ REJECTED │               │ accept         │ CANCELLED │
+  └──────────┘               ▼                └───────────┘
+                       ┌───────────┐
+                       │ CONFIRMED │
+                       └─────┬─────┘
+                             ▼  preparing
+                       ┌───────────┐   ← free customer cancellation ends here
+                       │ PREPARING │
+                       └─────┬─────┘
+                             ▼  ready
+                    ┌──────────────────┐
+                    │ READY_FOR_PICKUP │
+                    └────────┬─────────┘
+                             ▼  rider collects
+                       ┌────────────┐
+                       │ PICKED_UP  │
+                       └─────┬──────┘
+                             ▼
+                      ┌─────────────┐      ┌────────┐
+                      │ ON_THE_WAY  │ ───► │ FAILED │
+                      └──────┬──────┘      └────────┘
+                             ▼
+                       ┌───────────┐
+                       │ DELIVERED │  (terminal)
+                       └───────────┘
+```
+
+Transitions are declared as **data**, and each carries the set of actors
+permitted to make it. Both halves are enforced: the move must be legal _and_
+the caller must be entitled to it. A customer cannot mark their own order
+delivered; a rider cannot accept one for the kitchen; only the **assigned**
+rider can progress a delivery. Terminal orders never move again — corrections
+are made through refunds, which leave their own audit trail rather than
+rewriting history.
+
+`GET /orders/:id` returns `allowedTransitions` filtered to _your_ role, so a
+client renders its action buttons straight from the response.
+
+#### Placement
+
+`POST /orders` re-validates and re-prices the basket server-side; nothing about
+the total comes from the client. One transaction writes the order, its lines and
+add-ons, the opening timeline entry, the payment row, **stock decrements**,
+coupon accounting, and clears the cart. A half-written order is worse than a
+failed checkout, because nobody can tell what the customer actually bought.
+
+Stock is claimed with a conditional `UPDATE ... WHERE stock_quantity >= n`
+inside that same transaction, so two simultaneous checkouts cannot both take the
+last unit — the loser's whole order rolls back.
+
+Order numbers (`ZD-260804-0001`) come from a Postgres **sequence**, not a row
+count: two checkouts in the same millisecond would otherwise compute the same
+number and one would fail at random on the unique index.
+
+#### Money
+
+- **Cash on delivery** is recorded `PENDING` and settles the moment the order is
+  marked delivered — that is when the rider actually collects it.
+- **Wallet** payments debit inside the placement transaction; an insufficient
+  balance rolls the order back rather than leaving one nobody paid for.
+- **Commission** is taken on the food value alone. A cut of the delivery fee,
+  service fee or tip would bill the kitchen for money it never sees.
+- **Refunds are additive**, not a status change: a delivered order stays
+  delivered. Partial refunds accumulate, can never exceed what was paid, and
+  credit the customer's wallet with a matching ledger entry.
+
+#### Stock restoration
+
+Returned only when the order ends before the kitchen committed — `PENDING_PAYMENT`,
+`PLACED` or `CONFIRMED`. Once cooking has started the ingredients are gone, and
+restocking would overstate what is actually available.
 
 ---
 

@@ -63,8 +63,15 @@ import { ItemAvailabilityService } from '../menus/domain/services/item-availabil
     { provide: CartCouponRepository, useClass: PrismaCartCouponRepository },
     { provide: DeliveryPricingRepository, useClass: PrismaDeliveryPricingRepository },
   ],
-  // PricingService is exported so checkout prices an order with exactly the
-  // same code the cart preview used.
-  exports: [CartRepository, PricingService, CartValidationService],
+  // PricingService and the assembler are exported so checkout prices an order
+  // with exactly the code the cart preview used; DeliveryPricingRepository also
+  // serves platform settings such as the cancellation window.
+  exports: [
+    CartRepository,
+    PricingService,
+    CartValidationService,
+    CartAssemblerService,
+    DeliveryPricingRepository,
+  ],
 })
 export class CartsModule {}
