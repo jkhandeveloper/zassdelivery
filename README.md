@@ -14,7 +14,7 @@ Built with NestJS 11, PostgreSQL 16 + Prisma, Redis, and TypeScript in strict mo
 | **2**     | Auth & identity — register/login, JWT access + rotating refresh, RBAC, permissions                  | ✅ Complete |
 | **3**     | Users — admin CRUD, profile, addresses, favorites, notification preferences                         | ✅ Complete |
 | **4**     | Restaurants — registration, approval workflow, hours, radius, categories, images, search            | ✅ Complete |
-| 5         | Menus & catalog — menu categories, items, variants, add-ons                                         | Planned     |
+| **5**     | Menus — categories, items, variants, extra options, availability, images, inventory, bulk update    | ✅ Complete |
 | 6         | Cart & pricing — pricing engine, delivery fees by zone, coupons                                     | Planned     |
 | 7         | Orders — lifecycle state machine, order events, cancellation                                        | Planned     |
 | 8         | Dispatch & riders (Socket.IO live tracking)                                                         | Planned     |
