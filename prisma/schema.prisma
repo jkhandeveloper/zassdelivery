@@ -373,7 +373,8 @@ model User {
 
   addresses               Address[]
   roleAssignments         UserRoleAssignment[]
-  restaurantsOwned        Restaurant[]
+  restaurantsOwned        Restaurant[]             @relation("RestaurantOwner")
+  restaurantsApproved     Restaurant[]             @relation("RestaurantApprover")
   driverProfile           Driver?
   wallet                  Wallet?
   orders                  Order[]
@@ -669,15 +670,27 @@ model Restaurant {
   ratingCount Int     @default(0) @map("rating_count")
 
   minOrderAmount        Decimal @default(0) @map("min_order_amount") @db.Decimal(10, 2)
+  /// How far this restaurant will deliver from its own door, in metres. The
+  /// order must satisfy both this and the customer's zone.
+  deliveryRadiusMeters  Int     @default(5000) @map("delivery_radius_meters")
   avgPreparationMinutes Int     @default(25) @map("avg_preparation_minutes")
   /// Platform commission withheld from each order, as a percentage.
   commissionRate        Decimal @default(15) @map("commission_rate") @db.Decimal(5, 2)
+
+  // ── Approval workflow ──
+  /// When the owner submitted the listing for review.
+  submittedAt     DateTime? @map("submitted_at") @db.Timestamptz(3)
+  approvedAt      DateTime? @map("approved_at") @db.Timestamptz(3)
+  approvedById    String?   @map("approved_by_id")
+  /// Shown to the owner so a rejection is actionable rather than a dead end.
+  rejectionReason String?   @map("rejection_reason") @db.VarChar(500)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  owner      User                           @relation(fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  owner      User                           @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  approvedBy User?                          @relation("RestaurantApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   city       City                           @relation(fields: [cityId], references: [id], onDelete: Restrict)
   zone       Zone                           @relation(fields: [zoneId], references: [id], onDelete: Restrict)
   categories RestaurantCategoryAssignment[]
@@ -697,6 +710,7 @@ model Restaurant {
   @@index([ownerId])
   @@index([rating])
   @@index([deletedAt])
+  @@index([status, createdAt])
   @@map("restaurants")
 }
 

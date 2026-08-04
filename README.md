@@ -11,14 +11,15 @@ Built with NestJS 11, PostgreSQL 16 + Prisma, Redis, and TypeScript in strict mo
 | Milestone | Scope                                                                                               | State       |
 | --------- | --------------------------------------------------------------------------------------------------- | ----------- |
 | **1**     | Foundation: config, Docker, Prisma, Redis, logging, error handling, pagination, health, Swagger, CI | ✅ Complete |
-| 2         | Auth & identity — phone + OTP, JWT access/refresh, RBAC                                             | Planned     |
-| 3         | Users & addresses                                                                                   | Planned     |
-| 4         | Vendors & catalog                                                                                   | Planned     |
-| 5         | Cart & pricing                                                                                      | Planned     |
-| 6         | Orders                                                                                              | Planned     |
-| 7         | Dispatch & riders (Socket.IO)                                                                       | Planned     |
-| 8         | Payments (COD, wallet, JazzCash/Easypaisa)                                                          | Planned     |
-| 9         | Notifications, ratings, admin analytics                                                             | Planned     |
+| **2**     | Auth & identity — register/login, JWT access + rotating refresh, RBAC, permissions                  | ✅ Complete |
+| **3**     | Users — admin CRUD, profile, addresses, favorites, notification preferences                         | ✅ Complete |
+| **4**     | Restaurants — registration, approval workflow, hours, radius, categories, images, search            | ✅ Complete |
+| 5         | Menus & catalog — menu categories, items, variants, add-ons                                         | Planned     |
+| 6         | Cart & pricing — pricing engine, delivery fees by zone, coupons                                     | Planned     |
+| 7         | Orders — lifecycle state machine, order events, cancellation                                        | Planned     |
+| 8         | Dispatch & riders (Socket.IO live tracking)                                                         | Planned     |
+| 9         | Payments — COD, wallet ledger, JazzCash/Easypaisa                                                   | Planned     |
+| 10        | Notifications, ratings, admin analytics                                                             | Planned     |
 
 ---
 
@@ -200,9 +201,138 @@ native format, on success and on failure alike.
 
 ---
 
+## API reference
+
+Full interactive documentation at `/api/docs`. Everything below is prefixed
+with `/api/v1`.
+
+### Authentication — `/auth`
+
+| Method | Path               | Access | Notes                                          |
+| ------ | ------------------ | ------ | ---------------------------------------------- |
+| POST   | `/register`        | Public | CUSTOMER or RIDER only; signs in immediately   |
+| POST   | `/login`           | Public | 5 failures → 15-minute lockout, keyed by phone |
+| POST   | `/refresh`         | Public | Rotates the token; replay revokes the family   |
+| POST   | `/logout`          | Bearer | `allDevices` ends every session                |
+| GET    | `/me`              | Bearer | Read fresh from the database, not the token    |
+| POST   | `/change-password` | Bearer | Signs out every **other** session              |
+
+Access tokens are short-lived JWTs carrying role and permission claims. Refresh
+tokens rotate on every use and only their SHA-256 hash is stored, so a database
+dump yields no usable sessions. Presenting an already-rotated token is treated
+as theft and revokes the whole session family.
+
+### Me — `/me`
+
+Self-service. Ownership comes from the access token; there is no `:userId`
+anywhere, so one customer cannot reach another's data.
+
+| Method               | Path                            | Notes                                                    |
+| -------------------- | ------------------------------- | -------------------------------------------------------- |
+| GET / PATCH          | `/me`                           | Profile. Phone, role and status are not editable here    |
+| GET / PATCH / DELETE | `/me/notification-preferences`  | Per-category channel opt-ins                             |
+| GET / POST           | `/me/addresses`                 | Zone resolved from coordinates                           |
+| GET / PATCH / DELETE | `/me/addresses/:id`             | 404 for someone else's address                           |
+| PATCH                | `/me/addresses/:id/default`     | One default per user, enforced by a partial unique index |
+| GET / POST           | `/me/favorites`                 | Restaurants or menu items                                |
+| DELETE               | `/me/favorites/restaurants/:id` |                                                          |
+| DELETE               | `/me/favorites/menu-items/:id`  |                                                          |
+
+### Users (admin) — `/users`
+
+Permission-gated rather than role-gated, so a support role can hold
+`users.read` without inheriting `users.delete`.
+
+| Method | Path                 | Permission      |
+| ------ | -------------------- | --------------- |
+| GET    | `/users`             | `users.read`    |
+| GET    | `/users/:id`         | `users.read`    |
+| POST   | `/users`             | `users.create`  |
+| PATCH  | `/users/:id`         | `users.update`  |
+| PATCH  | `/users/:id/status`  | `users.suspend` |
+| DELETE | `/users/:id`         | `users.delete`  |
+| POST   | `/users/:id/restore` | `users.update`  |
+
+Supports `?page`, `?limit`, `?search` (name, phone, email — trigram indexed),
+`?role`, `?status`, `?createdFrom`, `?createdTo`, `?sortBy`, `?sortOrder`.
+A role change, suspension or deletion revokes every session immediately, since
+permissions are baked into access tokens.
+
+### Restaurants (public) — `/restaurants`
+
+| Method | Path                      | Notes                                      |
+| ------ | ------------------------- | ------------------------------------------ |
+| GET    | `/restaurants`            | Search. Only approved listings             |
+| GET    | `/restaurants/categories` | Cuisine categories                         |
+| GET    | `/restaurants/:slug`      | Detail with images and the weekly schedule |
+| GET    | `/restaurants/:id/hours`  | Includes whether open right now            |
+| GET    | `/restaurants/:id/images` | Gallery                                    |
+
+Search supports `?search` (trigram indexed), `?cityId`, `?zoneId`, `?category`,
+`?priceRange`, `?minRating`, `?acceptingOnly`, and `?latitude` + `?longitude` —
+which restricts results to restaurants whose **own delivery radius** reaches the
+customer and adds `distanceMeters` to each row.
+
+Each result carries **`canOrderNow`**: true only when the restaurant is
+approved, accepting orders, and currently open. Clients should gate the order
+button on that single flag rather than recombining the three.
+
+### Restaurant management — `/restaurant-management`
+
+Serves both vendors and staff; ownership is enforced inside the use-cases.
+
+| Method               | Path                     | Access                            |
+| -------------------- | ------------------------ | --------------------------------- |
+| POST                 | `/`                      | Vendor owner or admin             |
+| GET                  | `/mine`                  | Vendor owner — always self-scoped |
+| GET                  | `/`                      | `restaurants.read` (all statuses) |
+| GET / PATCH / DELETE | `/:id`                   | Owner or staff                    |
+| POST                 | `/:id/approve`           | `restaurants.approve`             |
+| POST                 | `/:id/reject`            | `restaurants.approve`             |
+| POST                 | `/:id/resubmit`          | Owner                             |
+| PATCH                | `/:id/status`            | `restaurants.suspend`             |
+| PATCH                | `/:id/accepting-orders`  | Owner — pause/resume              |
+| PUT                  | `/:id/hours`             | Owner — replaces the whole week   |
+| POST / DELETE        | `/:id/images[/:imageId]` | Owner                             |
+| PUT                  | `/:id/images/order`      | Owner — must list every image     |
+
+#### Approval workflow
+
+```
+                 ┌─────────────────────┐
+   register ───► │  PENDING_APPROVAL   │
+                 └──────┬───────┬──────┘
+                approve │       │ reject
+                        ▼       ▼
+                  ┌────────┐  ┌──────────┐
+                  │ ACTIVE │  │ REJECTED │
+                  └──┬───┬─┘  └────┬─────┘
+       suspend ──────┘   └── temp  │ resubmit
+              ▼         closure ▼  ▼
+       ┌───────────┐   ┌────────────────────┐
+       │ SUSPENDED │   │ TEMPORARILY_CLOSED │
+       └───────────┘   └────────────────────┘
+```
+
+Transitions are declared as data, so an illegal jump (rejected straight to
+active, skipping re-review) fails loudly rather than corrupting the queue.
+Nothing goes live on its own: registration always lands in `PENDING_APPROVAL`,
+and approval is **blocked until business hours are set**, since a restaurant
+with none would be permanently "closed".
+
+#### Business hours
+
+Stored as local `HH:mm` in **Asia/Karachi** and compared in that timezone — a
+container running in UTC would otherwise report a Peshawar restaurant closed for
+five hours a day. A closing time at or before the opening time means the window
+crosses midnight (`18:00`–`02:00` is a normal late-night shift). `PUT` replaces
+the whole week; omitted days are stored as closed, so no stale row survives.
+
+---
+
 ## Data model
 
-42 tables across seven domains. `User` and `Order` are the two hubs: almost
+45 tables across ten domains. `User` and `Order` are the two hubs: almost
 every table reaches one of them within a single hop.
 
 ```mermaid

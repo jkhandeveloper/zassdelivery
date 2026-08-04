@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsOptional,
@@ -142,6 +143,7 @@ export class LogoutDto {
   })
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => value === true || value === 'true')
+  @IsBoolean()
   allDevices?: boolean;
 }
 
