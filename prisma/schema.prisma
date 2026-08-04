@@ -818,16 +818,33 @@ model MenuItem {
   rating      Decimal @default(0) @db.Decimal(3, 2)
   ratingCount Int     @default(0) @map("rating_count")
 
+  // ── Availability window ──
+  /// Days this item is sold. Empty means every day.
+  availableDays DayOfWeek[] @map("available_days")
+  /// Local HH:mm bounds, e.g. a breakfast item sold 07:00-11:00. Null means
+  /// available whenever the restaurant itself is open.
+  availableFrom String?     @map("available_from") @db.VarChar(5)
+  availableTo   String?     @map("available_to") @db.VarChar(5)
+
+  // ── Inventory ──
+  /// Most kitchens cook to order and never count stock, so tracking is opt-in.
+  /// When false, stockQuantity is ignored entirely.
+  trackInventory    Boolean @default(false) @map("track_inventory")
+  stockQuantity     Int     @default(0) @map("stock_quantity")
+  /// Below this, the item is flagged to the owner as running low.
+  lowStockThreshold Int     @default(5) @map("low_stock_threshold")
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  menuCategory MenuCategory  @relation(fields: [menuCategoryId], references: [id], onDelete: Cascade)
-  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuCategory MenuCategory    @relation(fields: [menuCategoryId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   variants     MenuVariant[]
   addOnGroups  AddOnGroup[]
   orderItems   OrderItem[]
   favorites    Favorite[]
+  images       MenuItemImage[]
 
   @@index([restaurantId, status])
   @@index([menuCategoryId, sortOrder])
@@ -846,6 +863,11 @@ model MenuVariant {
   isDefault   Boolean @default(false) @map("is_default")
   isAvailable Boolean @default(true) @map("is_available")
   sortOrder   Int     @default(0) @map("sort_order")
+
+  /// Stock is tracked per variant when it is tracked at all: a "Full" karahi
+  /// and a "Half" draw on the same kitchen but sell independently.
+  trackInventory Boolean @default(false) @map("track_inventory")
+  stockQuantity  Int     @default(0) @map("stock_quantity")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -1624,4 +1646,21 @@ model NotificationPreference {
 
   @@id([userId, type])
   @@map("notification_preferences")
+}
+
+/// Gallery for a single dish. The item's own `imageUrl` remains the primary
+/// thumbnail; these are the additional shots on the detail screen.
+model MenuItemImage {
+  id         String  @id @default(cuid())
+  menuItemId String  @map("menu_item_id")
+  url        String  @db.VarChar(500)
+  caption    String? @db.VarChar(180)
+  sortOrder  Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@index([menuItemId, sortOrder])
+  @@map("menu_item_images")
 }

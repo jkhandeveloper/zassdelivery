@@ -328,11 +328,89 @@ five hours a day. A closing time at or before the opening time means the window
 crosses midnight (`18:00`–`02:00` is a normal late-night shift). `PUT` replaces
 the whole week; omitted days are stored as closed, so no stale row survives.
 
+### Menus (public)
+
+| Method | Path                          | Notes                                |
+| ------ | ----------------------------- | ------------------------------------ |
+| GET    | `/restaurants/:id/menu`       | Active menus + sections, one request |
+| GET    | `/restaurants/:id/menu-items` | Searchable, filterable, sortable     |
+| GET    | `/menu-items/:id`             | Variants, option groups, gallery     |
+| GET    | `/menu-items/:id/images`      | Dish gallery                         |
+
+Item filters: `?search` (trigram), `?menuCategoryId`, `?status`, `?spiceLevel`,
+`?isVegetarian`, `?featuredOnly`, `?minPrice`, `?maxPrice`.
+
+Each dish carries **`isAvailable`** plus an **`availabilityReason`** —
+`available`, `hidden`, `out_of_stock`, `sold_out` or `outside_window`. Three
+separate things can make a dish unorderable and a client needs to tell them
+apart ("sold out" reads very differently from "not served before 11am"), so
+they are not collapsed into one boolean. `effectivePrice` resolves the
+discount, so clients never re-derive it.
+
+### Menu management — `/menu-management`
+
+| Method                | Path                                            | Notes                               |
+| --------------------- | ----------------------------------------------- | ----------------------------------- |
+| GET / POST            | `/restaurants/:id/menus`                        | Includes inactive menus             |
+| PATCH / DELETE        | `/menus/:menuId`                                | Delete refused while items remain   |
+| POST                  | `/menus/:menuId/categories`                     | Create a section                    |
+| PUT                   | `/menus/:menuId/categories/order`               | Must list every section             |
+| PATCH / DELETE        | `/categories/:categoryId`                       |                                     |
+| GET                   | `/restaurants/:id/items`                        | Stock counts, hidden + deleted      |
+| POST                  | `/items`                                        | Restaurant derived from the section |
+| PATCH / DELETE        | `/items/:itemId`                                | Soft delete                         |
+| POST / DELETE         | `/items/:itemId/images[/:imageId]`              | Max 8 per dish                      |
+| POST / PATCH / DELETE | `/items/:itemId/variants[/:variantId]`          | Absolute prices                     |
+| POST / PATCH / DELETE | `/items/:itemId/option-groups[/:groupId]`       |                                     |
+| POST                  | `/items/:itemId/option-groups/:groupId/options` | Add an extra option                 |
+| PATCH / DELETE        | `/items/:itemId/options/:optionId`              |                                     |
+| POST                  | `/items/:itemId/stock`                          | Signed delta, applied atomically    |
+| PATCH                 | `/restaurants/:id/items/bulk`                   | Reprice/restock up to 200           |
+| PATCH                 | `/restaurants/:id/items/bulk-status`            | Bulk availability flip              |
+
+#### Inventory
+
+Stock tracking is **opt-in per dish** (`trackInventory`) — most kitchens cook to
+order and never count. When enabled, adjustments go through a single
+conditional `UPDATE`:
+
+```sql
+UPDATE menu_items SET stock_quantity = stock_quantity + $delta
+WHERE id = $id AND stock_quantity >= abs($delta)   -- when selling
+```
+
+The guard is evaluated by Postgres inside the same statement, so two concurrent
+sales cannot both pass the check and oversell the kitchen. A read-then-write
+would. A `CHECK (stock_quantity >= 0)` constraint backs it up.
+
+`?lowStockOnly=true` gives the owner's restock view, served by a partial index
+covering only tracked items.
+
+#### Bulk update
+
+`bulk` reprices or restocks up to 200 dishes in **one transaction** — a
+half-repriced menu is worse than an unchanged one. Every id is verified against
+the restaurant before anything is written, _and_ `restaurantId` is repeated in
+each `WHERE` as a second line of defence, so a guessed id cannot touch another
+vendor's menu. `bulk-status` is the "we've run out of chicken" button: one call
+instead of editing twenty dishes mid-service.
+
+#### Invariants enforced
+
+- A discount above the base price is rejected — it would quietly raise the price.
+- Availability windows need both bounds or neither; half a window is ambiguous.
+- The first variant becomes the default; the default cannot be deleted while
+  others remain, or the dish would have variants with none selected.
+- Option groups must be satisfiable (`minSelect ≤ maxSelect`; required implies
+  `minSelect ≥ 1`), and a required group cannot be emptied — either would make
+  checkout impossible.
+- A dish can only be moved to a section of the **same** restaurant.
+
 ---
 
 ## Data model
 
-45 tables across ten domains. `User` and `Order` are the two hubs: almost
+46 tables across ten domains. `User` and `Order` are the two hubs: almost
 every table reaches one of them within a single hop.
 
 ```mermaid
