@@ -40,6 +40,8 @@ import { PrismaRefreshTokenRepository } from './infrastructure/repositories/pris
     { provide: RefreshTokenRepository, useClass: PrismaRefreshTokenRepository },
   ],
   // TokenService and JwtModule are exported for the global JwtAuthGuard.
-  exports: [TokenService, PasswordService, JwtModule, AuthUserRepository],
+  // RefreshTokenRepository is exported so other modules can end a user's
+  // sessions when a role change, suspension or deletion demands it.
+  exports: [TokenService, PasswordService, JwtModule, AuthUserRepository, RefreshTokenRepository],
 })
 export class AuthModule {}

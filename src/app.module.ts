@@ -6,6 +6,7 @@ import { CommonModule } from './common/common.module';
 import { configurations, throttleConfig, validateEnvironment } from './config';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { UsersModule } from './modules/users/users.module';
 import { SharedModule } from './shared/shared.module';
 
 /**
@@ -41,6 +42,7 @@ import { SharedModule } from './shared/shared.module';
 
     // Features
     AuthModule,
+    UsersModule,
     HealthModule,
   ],
 })

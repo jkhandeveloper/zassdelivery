@@ -371,26 +371,27 @@ model User {
   /// Soft delete. Non-null rows are excluded from all read paths.
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  addresses          Address[]
-  roleAssignments    UserRoleAssignment[]
-  restaurantsOwned   Restaurant[]
-  driverProfile      Driver?
-  wallet             Wallet?
-  orders             Order[]
-  payments           Payment[]
-  transactions       Transaction[]
-  couponRedemptions  CouponRedemption[]
-  favorites          Favorite[]
-  reviews            Review[]
-  notifications      Notification[]
-  supportTickets     SupportTicket[]        @relation("TicketOwner")
-  assignedTickets    SupportTicket[]        @relation("TicketAssignee")
-  ticketMessages     SupportTicketMessage[]
-  auditLogs          AuditLog[]
-  couponsCreated     Coupon[]
-  settingsUpdated    Setting[]
-  orderStatusChanges OrderStatusHistory[]
-  refreshTokens      RefreshToken[]
+  addresses               Address[]
+  roleAssignments         UserRoleAssignment[]
+  restaurantsOwned        Restaurant[]
+  driverProfile           Driver?
+  wallet                  Wallet?
+  orders                  Order[]
+  payments                Payment[]
+  transactions            Transaction[]
+  couponRedemptions       CouponRedemption[]
+  favorites               Favorite[]
+  reviews                 Review[]
+  notifications           Notification[]
+  supportTickets          SupportTicket[]          @relation("TicketOwner")
+  assignedTickets         SupportTicket[]          @relation("TicketAssignee")
+  ticketMessages          SupportTicketMessage[]
+  auditLogs               AuditLog[]
+  couponsCreated          Coupon[]
+  settingsUpdated         Setting[]
+  orderStatusChanges      OrderStatusHistory[]
+  refreshTokens           RefreshToken[]
+  notificationPreferences NotificationPreference[]
 
   @@index([role, status])
   @@index([status, createdAt])
@@ -1583,4 +1584,30 @@ model RefreshToken {
   @@index([familyId])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+/// Per-user, per-category notification opt-ins.
+///
+/// Modelled as one row per (user, category) rather than a wide column per
+/// channel combination: adding a new category or channel later is then a data
+/// change, not a migration that rewrites the users table.
+///
+/// A missing row means "not yet customised" and the application falls back to
+/// the category defaults, so an account never has to be back-filled to work.
+model NotificationPreference {
+  userId String           @map("user_id")
+  type   NotificationType
+
+  inApp Boolean @default(true) @map("in_app")
+  push  Boolean @default(true)
+  /// Off by default: SMS costs money per message in this market.
+  sms   Boolean @default(false)
+  email Boolean @default(false)
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, type])
+  @@map("notification_preferences")
 }
