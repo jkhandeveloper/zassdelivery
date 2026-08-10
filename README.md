@@ -22,7 +22,7 @@ Built with NestJS 11, PostgreSQL 16 + Prisma, Redis, and TypeScript in strict mo
 | **10**    | Payments — COD, JazzCash, Easypaisa, verification, webhooks, refunds, invoices, ledger              | ✅ Complete |
 | **11**    | Notifications — FCM push, device registry, history, preferences, admin broadcasts                   | ✅ Complete |
 | 12        | Ratings and admin analytics                                                                         | Planned     |
-| 13        | Live tracking over Socket.IO                                                                        | Planned     |
+| **13**    | Realtime — Socket.IO rooms, live order and rider tracking, Redis adapter, reconnect                 | ✅ Complete |
 
 ---
 
@@ -1059,6 +1059,105 @@ carry on working. Set `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL` and `FCM_PRIVATE_KEY`
 
 ---
 
+### Realtime — `/realtime` and the `/realtime` websocket namespace
+
+The socket protocol is documented in Swagger under **Realtime**, and
+`GET /realtime/handshake` returns the whole event catalogue as data — read that
+rather than hard-coding event names, because a mistyped one does not error, it
+simply never fires.
+
+```
+  connect ──► authenticate (same access token as the HTTP API)
+                  │
+                  ├─ auto-joined: user:<yourId>
+                  ├─ auto-joined: rider:<driverId>   (riders)
+                  └─ auto-joined: dispatch           (staff)
+                  │
+                  ▼
+            connection:ready { rooms, recovered }
+                  │
+   order:subscribe ─► order:snapshot  ─┐
+                                        ├─► order:status
+                                        ├─► rider:location
+                                        └─► rider:assigned
+```
+
+| Room               | Who may join                                  | What arrives                           |
+| ------------------ | --------------------------------------------- | -------------------------------------- |
+| `user:<id>`        | Automatic, on connect                         | `notification:new`                     |
+| `order:<id>`       | The customer, the assigned rider, the kitchen | Status, rider position, rider assigned |
+| `restaurant:<id>`  | Owner and staff                               | New and updated tickets                |
+| `rider:<driverId>` | That rider, automatically                     | `delivery:offered`                     |
+| `dispatch`         | Staff, automatically                          | Every rider position and offer         |
+
+#### Authentication
+
+The same access token, verified the same way — including the Redis deny-list, so
+signing out closes the socket. A websocket that outlives its own logout is a
+subtle and very long-lived hole.
+
+The token is read from `auth.token`, an `Authorization` header or a `token` query
+parameter, because the three Socket.IO client families disagree about which is
+available: browsers cannot set headers on the initial upgrade.
+
+Authorisation happens **twice**. The handshake proves who the client is; every
+subscribe proves they may see that particular thing. A socket that authenticated
+an hour ago is not a socket entitled to whatever room it names. An order that is
+not yours is refused with the same message as one that does not exist — the
+difference would be a way to discover which ids are real.
+
+#### Rider and customer tracking
+
+A rider's app emits `rider:location`; the server resolves which delivery they are
+carrying and broadcasts to that order's room, where the customer is watching, and
+to the dispatch board. **The order is never taken from the payload** — a rider
+cannot put a position onto somebody else's delivery.
+
+Two throttles keep it sane. Positions closer together than 20 m are not
+broadcast, because a parked rider reporting every few seconds would otherwise
+fill a customer's socket with a stationary dot. And the position is written to
+the database at most every 15 seconds: a hundred riders reporting every second is
+a hundred writes a second for data that is stale before it commits. What is
+persisted is the fallback the snapshot reads on reconnect.
+
+#### Reconnect
+
+Two mechanisms, because they cover different failures.
+
+Socket.IO's own **connection state recovery** buffers a dropped session for two
+minutes and replays what it missed — a tunnel, a lift, a handover between cell
+towers, the cases a customer never notices.
+
+Beyond that window, **every subscribe answers with a snapshot**: the order's
+current status, the rider, their last known position and the distance left. A
+phone that was off for an hour redraws from the truth rather than reasoning about
+what it missed. `connection:ready` carries `recovered`, so a client knows which
+of the two happened.
+
+#### Redis adapter
+
+Without it, a platform on more than one instance delivers events only to clients
+connected to the instance that emitted them — a customer on instance A would see
+nothing when the rider's app on instance B reported a position. The failure is
+invisible in development, where there is only ever one instance.
+
+The adapter is optional at boot. If Redis cannot be reached the server still
+starts and serves a single instance correctly, because a delivery platform that
+will not accept orders is worse than one whose live map is stale.
+
+#### Who publishes
+
+Nothing outside this module touches Socket.IO. Orders, riders and notifications
+depend on `RealtimeService`, which keeps the arrows pointing one way — modules
+publish into realtime, realtime imports none of them. It answers its four
+authorisation questions with its own narrow repository instead.
+
+Every publish is fire-and-forget. A websocket is a convenience on top of state
+that has already been committed: letting a broadcast failure propagate would roll
+back an order because somebody's wifi dropped.
+
+---
+
 ## Data model
 
 58 tables across eleven domains. `User` and `Order` are the two hubs: almost
@@ -1202,6 +1301,104 @@ The seed is idempotent — every write is an upsert on a natural key.
 
 ---
 
+## Third-party credentials
+
+**Everything the platform needs from an outside provider lives here.** Fill these
+in and the corresponding feature switches itself on; leave them blank and it
+reports itself unavailable rather than failing at the moment somebody tries to
+use it. Nothing below is required to run the API, place an order or complete a
+delivery.
+
+Set them in `.env` (never committed) or in your deployment's secret store. The
+same names appear in `.env.example` with blank values.
+
+### JazzCash — online payments
+
+Issued by JazzCash per merchant, from the merchant portal.
+
+| Variable                  | What it is                                        | Where it comes from        |
+| ------------------------- | ------------------------------------------------- | -------------------------- |
+| `JAZZCASH_MERCHANT_ID`    | Merchant identifier, e.g. `MC12345`               | JazzCash merchant portal   |
+| `JAZZCASH_PASSWORD`       | Merchant API password                             | JazzCash merchant portal   |
+| `JAZZCASH_INTEGRITY_SALT` | Secret the request/response HMAC is keyed with    | JazzCash merchant portal   |
+| `JAZZCASH_CHECKOUT_URL`   | Hosted checkout endpoint. Defaults to the sandbox | JazzCash integration guide |
+| `JAZZCASH_API_URL`        | Status-inquiry and refund endpoint                | JazzCash integration guide |
+
+Switch the two URLs from `sandbox.jazzcash.com.pk` to the production hosts when
+going live. All three secrets must be present or the gateway reports itself
+unavailable — a partially configured gateway would sign requests with nothing.
+
+### Easypaisa — online payments
+
+Issued by Easypaisa per store.
+
+| Variable                 | What it is                                | Where it comes from           |
+| ------------------------ | ----------------------------------------- | ----------------------------- |
+| `EASYPAISA_STORE_ID`     | Store identifier                          | Easypaisa merchant onboarding |
+| `EASYPAISA_HASH_KEY`     | 16-character AES key for the request hash | Easypaisa merchant onboarding |
+| `EASYPAISA_CHECKOUT_URL` | Easypay hosted checkout                   | Easypaisa integration guide   |
+| `EASYPAISA_API_URL`      | Inquiry and reversal endpoint             | Easypaisa integration guide   |
+
+The hash key must be exactly 16, 24 or 32 characters — AES will not accept
+anything else, and a wrong-length key silently omits the hash instead of
+crashing.
+
+### Firebase Cloud Messaging — push notifications
+
+From a **service-account JSON key**: Firebase console → Project settings →
+Service accounts → _Generate new private key_. Three fields of that file are
+needed.
+
+| Variable           | JSON field     | Notes                                                   |
+| ------------------ | -------------- | ------------------------------------------------------- |
+| `FCM_PROJECT_ID`   | `project_id`   | Also visible in the Firebase console URL                |
+| `FCM_CLIENT_EMAIL` | `client_email` | Ends `@<project>.iam.gserviceaccount.com`               |
+| `FCM_PRIVATE_KEY`  | `private_key`  | Multi-line PEM — keep the `\n` escapes, on **one line** |
+
+`FCM_PRIVATE_KEY` is the one that catches people out. Copy the value exactly as
+it appears in the JSON, escapes included:
+
+```bash
+FCM_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg...\n-----END PRIVATE KEY-----\n"
+```
+
+The application un-escapes it at boot. A key pasted with real newlines will not
+survive a `.env` file.
+
+### Public URL — required by any provider that calls back
+
+| Variable          | What it is                                                                |
+| ----------------- | ------------------------------------------------------------------------- |
+| `PUBLIC_BASE_URL` | The origin a payment gateway sends the customer and its callbacks back to |
+
+**A gateway cannot reach `localhost`.** In development, use a tunnel
+(`ngrok http 3000`, `cloudflared tunnel`) and set this to the tunnel's URL, or
+callbacks will never arrive and every online payment will sit unsettled. In
+production it is the public API origin.
+
+### What still has no third party
+
+Deliberately, so the platform runs end to end without an account anywhere:
+
+- **SMS / OTP** — the auth module issues and verifies codes itself. No Twilio,
+  no gateway, nothing to configure.
+- **Maps and routing** — distances are great-circle, computed in-process.
+  Dispatch ranking and delivery fees need no Google Maps key.
+- **Email** — the channel exists in the preference matrix but is not wired to a
+  provider; nothing is sent.
+
+### Checking what is switched on
+
+Two endpoints report the live state of this configuration, so a deployment can
+be verified without reading its own secrets:
+
+```bash
+GET /api/v1/payments/methods         # which gateways can take money
+GET /api/v1/notifications/preferences # pushConfigured: true | false
+```
+
+---
+
 ## Configuration
 
 All environment variables are declared in `src/config/env.validation.ts` and
@@ -1242,6 +1439,8 @@ Some dependencies are deliberately held back from the newest release:
 - **TypeScript 5.9.3** — `ts-jest` requires `typescript >=4.3 <7`; TypeScript 7
   would break the test toolchain.
 - **ioredis 5.11.1** — 6.0.0 is a very recent major on critical infrastructure.
+- **socket.io 4.8.1 / @socket.io/redis-adapter 8.3.0** — the adapter's peer range
+  is Socket.IO 4.x; the pair must move together.
 
 `package.json` also carries an `allowScripts` block. npm 11 blocks install
 scripts by default; Prisma's engine download is one of them, so the approval is

@@ -9,6 +9,7 @@ import type { AuthenticatedUser } from '@/common/interfaces/authenticated-user.i
 import type { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
 import { buildOrderBy } from '@/common/utils/pagination.util';
 import { OrderRepository } from '@/modules/orders/domain/repositories/order.repository';
+import { RealtimeService } from '@/modules/realtime/application/realtime.service';
 
 import {
   AssignmentRepository,
@@ -52,6 +53,7 @@ export class AssignOrderUseCase {
     private readonly dispatch: DispatchService,
     private readonly earnings: EarningsCalculator,
     private readonly settings: RiderSettingsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /**
@@ -99,20 +101,33 @@ export class AssignOrderUseCase {
 
     const timeoutSeconds = dto.timeoutSeconds ?? dispatchSettings.offerTimeoutSeconds;
 
-    return toAssignmentDto(
-      await this.assignments.offer({
-        orderId: order.id,
-        driverId: chosen.driverId,
-        expiresAt: new Date(Date.now() + timeoutSeconds * 1000),
-        pickupDistanceKm: chosen.pickupDistanceKm,
-        estimatedEarning: this.earnings.quote(
-          order.distanceKm === null ? null : Number(order.distanceKm),
-          rates,
-        ),
-        assignedById: dto.driverId === undefined ? null : actor.id,
-        isAuto: dto.driverId === undefined,
-      }),
-    );
+    const assignment = await this.assignments.offer({
+      orderId: order.id,
+      driverId: chosen.driverId,
+      expiresAt: new Date(Date.now() + timeoutSeconds * 1000),
+      pickupDistanceKm: chosen.pickupDistanceKm,
+      estimatedEarning: this.earnings.quote(
+        order.distanceKm === null ? null : Number(order.distanceKm),
+        rates,
+      ),
+      assignedById: dto.driverId === undefined ? null : actor.id,
+      isAuto: dto.driverId === undefined,
+    });
+
+    // An offer with a sixty-second window is only worth having if the rider
+    // hears about it in the first second. Polling would spend a third of it.
+    this.realtime.deliveryOffered(assignment.driverId, {
+      assignmentId: assignment.id,
+      orderId: assignment.orderId,
+      orderNumber: assignment.order.orderNumber,
+      restaurantName: assignment.order.restaurant.name,
+      estimatedEarning: Number(assignment.estimatedEarning),
+      pickupDistanceKm:
+        assignment.pickupDistanceKm === null ? null : Number(assignment.pickupDistanceKm),
+      expiresAt: assignment.expiresAt.toISOString(),
+    });
+
+    return toAssignmentDto(assignment);
   }
 
   private async autoSelect(
@@ -276,6 +291,7 @@ export class AcceptOfferUseCase {
     private readonly assignments: AssignmentRepository,
     private readonly access: AssignmentAccessService,
     private readonly notifications: DeliveryNotificationPort,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /**
@@ -299,6 +315,16 @@ export class AcceptOfferUseCase {
       orderNumber: accepted.order.orderNumber,
       riderName: rider.user.fullName,
       riderPhone: rider.user.phone,
+    });
+
+    // The customer's tracking screen gains a rider — and a name and number to
+    // call — without waiting for a poll.
+    this.realtime.riderAssigned({
+      orderId: accepted.order.id,
+      driverId: rider.id,
+      riderName: rider.user.fullName,
+      riderPhone: rider.user.phone,
+      at: new Date().toISOString(),
     });
 
     return toAssignmentDto(accepted, { revealCustomer: true });

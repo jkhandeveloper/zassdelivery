@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { CartsModule } from '../carts/carts.module';
+import { RealtimeModule } from '../realtime/realtime.module';
 import { RestaurantsModule } from '../restaurants/restaurants.module';
 import {
   AdvanceOrderUseCase,
@@ -22,8 +23,9 @@ import { OrdersController } from './orders.controller';
 @Module({
   // CartsModule supplies the cart, its assembler and the delivery/settings
   // repository — checkout prices the order with exactly the code the cart
-  // preview used. RestaurantsModule resolves restaurant ownership.
-  imports: [CartsModule, RestaurantsModule],
+  // preview used. RestaurantsModule resolves restaurant ownership, and
+  // RealtimeModule pushes each transition to whoever is watching.
+  imports: [CartsModule, RestaurantsModule, RealtimeModule],
   controllers: [OrdersController, OrderManagementController],
   providers: [
     OrderAccessService,

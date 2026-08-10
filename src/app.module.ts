@@ -11,6 +11,7 @@ import { MenusModule } from './modules/menus/menus.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
 import { RestaurantsModule } from './modules/restaurants/restaurants.module';
 import { RidersModule } from './modules/riders/riders.module';
 import { SearchModule } from './modules/search/search.module';
@@ -59,6 +60,7 @@ import { SharedModule } from './shared/shared.module';
     RidersModule,
     PaymentsModule,
     NotificationsModule,
+    RealtimeModule,
     HealthModule,
   ],
 })

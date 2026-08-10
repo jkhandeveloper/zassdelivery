@@ -1,11 +1,12 @@
 import { Inject, Injectable, type LoggerService } from '@nestjs/common';
-import { PaymentMethod } from '@prisma/client';
+import { OrderStatus, PaymentMethod } from '@prisma/client';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
 import { CartAssemblerService } from '@/modules/carts/application/use-cases/cart-assembler.service';
 import { CartRepository } from '@/modules/carts/domain/repositories/cart.repository';
 import { CartValidationService } from '@/modules/carts/domain/services/cart-validation.service';
+import { RealtimeService } from '@/modules/realtime/application/realtime.service';
 
 import { OrderRepository } from '../../domain/repositories/order.repository';
 import { toOrderDto, type OrderDto } from '../dto/order-response.dto';
@@ -19,6 +20,7 @@ export class PlaceOrderUseCase {
     private readonly carts: CartRepository,
     private readonly assembler: CartAssemblerService,
     private readonly orders: OrderRepository,
+    private readonly realtime: RealtimeService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -139,6 +141,21 @@ export class PlaceOrderUseCase {
       `Order ${order.orderNumber} placed by ${userId} at ${cart.restaurant.name} for ${totals.totalAmount} PKR`,
       this.context,
     );
+
+    // The kitchen's board updates without a refresh. A gateway order is held in
+    // PENDING_PAYMENT and is deliberately not announced yet — the restaurant
+    // hears about it when the money lands, not when the customer starts paying.
+    if (order.status !== OrderStatus.PENDING_PAYMENT) {
+      this.realtime.restaurantOrderPlaced(order.restaurantId, {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        totalAmount: Number(order.totalAmount),
+        itemCount: order.items.length,
+        customerName: order.customer.fullName,
+        placedAt: order.placedAt?.toISOString() ?? null,
+      });
+    }
 
     return toOrderDto(order, { includeTransactions: true });
   }

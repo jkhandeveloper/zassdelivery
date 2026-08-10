@@ -13,6 +13,8 @@ import type {
   OrderWithDetails,
 } from '@/modules/orders/domain/repositories/order.repository';
 
+import type { RealtimeService } from '@/modules/realtime/application/realtime.service';
+
 import type { AssignmentRepository } from '../../domain/repositories/assignment.repository';
 import type { RiderRepository, RiderWithDetails } from '../../domain/repositories/rider.repository';
 import { DispatchService } from '../../domain/services/dispatch.service';
@@ -86,6 +88,7 @@ function build(options: {
         rejectionReason: null,
         otpHash: null,
         otpVerifiedAt: null,
+        orderId: 'order-1',
         order: order().restaurant
           ? {
               ...order(),
@@ -108,11 +111,17 @@ function build(options: {
       .mockResolvedValue({ baseFare: 60, perKm: 18, tipSharePercentage: 100, minimumFare: 80 }),
   } as unknown as jest.Mocked<RiderSettingsService>;
 
+  const realtime = {
+    deliveryOffered: jest.fn(),
+    riderAssigned: jest.fn(),
+  } as unknown as jest.Mocked<RealtimeService>;
+
   return {
     orders,
     riders,
     assignments,
     settings,
+    realtime,
     useCase: new AssignOrderUseCase(
       assignments,
       riders,
@@ -120,6 +129,7 @@ function build(options: {
       new DispatchService(),
       new EarningsCalculator(),
       settings,
+      realtime,
     ),
   };
 }

@@ -5,6 +5,7 @@ import type { ConfigType } from '@nestjs/config';
 import type { Prisma } from '@prisma/client';
 
 import { notificationsConfig } from '@/config';
+import { RealtimeService } from '@/modules/realtime/application/realtime.service';
 import { NotificationPreferenceRepository } from '@/modules/users/domain/repositories/notification-preference.repository';
 
 import {
@@ -71,6 +72,7 @@ export class NotifyService {
     private readonly preferences: NotificationPreferenceRepository,
     private readonly resolver: PreferenceResolver,
     private readonly push: PushSender,
+    private readonly realtime: RealtimeService,
     @Inject(notificationsConfig.KEY)
     private readonly config: ConfigType<typeof notificationsConfig>,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
@@ -113,6 +115,19 @@ export class NotifyService {
           broadcastId: input.broadcastId ?? null,
         })
       : null;
+
+    // A connected client gets it now rather than on its next poll — and this
+    // costs nothing when nobody is listening, which is most of the time.
+    if (notification !== null) {
+      this.realtime.notificationCreated(input.userId, {
+        id: notification.id,
+        type: notification.type,
+        title: notification.title,
+        body: notification.body,
+        data: input.data ?? null,
+        createdAt: notification.createdAt.toISOString(),
+      });
+    }
 
     if (!channels.includes(NotificationChannel.PUSH)) {
       return {

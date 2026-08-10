@@ -3,6 +3,7 @@ import type { LoggerService } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 
 import type { notificationsConfig } from '@/config';
+import type { RealtimeService } from '@/modules/realtime/application/realtime.service';
 import type { NotificationPreferenceRepository } from '@/modules/users/domain/repositories/notification-preference.repository';
 
 import type {
@@ -39,7 +40,13 @@ function build(options: {
   pushConfigured?: boolean;
 }) {
   const notifications = {
-    create: jest.fn().mockResolvedValue({ id: 'notification-1' }),
+    create: jest.fn().mockResolvedValue({
+      id: 'notification-1',
+      type: NotificationType.ORDER_UPDATE,
+      title: 'Your order is on the way',
+      body: 'Bilal is 5 minutes away.',
+      createdAt: new Date(),
+    }),
     createMany: jest.fn().mockResolvedValue(0),
     recordPushResult: jest.fn().mockResolvedValue(undefined),
   } as unknown as jest.Mocked<NotificationRepository>;
@@ -62,17 +69,21 @@ function build(options: {
     sendMany: jest.fn().mockResolvedValue(options.outcomes ?? [outcome('device-a')]),
   } as unknown as jest.Mocked<PushSender>;
 
+  const realtime = { notificationCreated: jest.fn() } as unknown as jest.Mocked<RealtimeService>;
+
   return {
     notifications,
     devices,
     preferences,
     push,
+    realtime,
     service: new NotifyService(
       notifications,
       devices,
       preferences,
       new PreferenceResolver(),
       push,
+      realtime,
       CONFIG,
       logger,
     ),

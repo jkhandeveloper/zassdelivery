@@ -35,7 +35,10 @@
       "Bash(rm -f token-*.txt)",
       "Bash(bash pay-smoke.sh)",
       "Bash(sed -n '/^model NotificationPreference/,/^}/p' prisma/schema.prisma)",
-      "Bash(sed -n '/^enum NotificationType/,/^}/p;/^enum NotificationChannel/,/^}/p' prisma/schema.prisma)"
+      "Bash(sed -n '/^enum NotificationType/,/^}/p;/^enum NotificationChannel/,/^}/p' prisma/schema.prisma)",
+      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\(JSON.stringify\\({d:Object.keys\\(p.dependencies\\),dev:Object.keys\\(p.devDependencies\\)},null,1\\)\\)\")",
+      "Bash(npm install *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\);for\\(const k of ['@nestjs/websockets','@nestjs/platform-socket.io','socket.io','@socket.io/redis-adapter']\\)console.log\\(k, p.dependencies[k]\\)\")"
     ],
     "additionalDirectories": [
       "/tmp/claude-1000/-var-www-zassdelivery/dee2c186-c48d-4f5b-9a54-a98fbb41d909/scratchpad"

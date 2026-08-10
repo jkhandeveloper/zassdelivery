@@ -12,6 +12,8 @@ import { buildOrderBy } from '@/common/utils/pagination.util';
 import { DeliveryPricingRepository } from '@/modules/carts/domain/repositories/cart.repository';
 import { RestaurantRepository } from '@/modules/restaurants/domain/repositories/restaurant.repository';
 
+import { RealtimeService } from '@/modules/realtime/application/realtime.service';
+
 import { OrderRepository, type OrderWithDetails } from '../../domain/repositories/order.repository';
 import { OrderStateMachine, REFUNDABLE_STATUSES } from '../../domain/services/order-state-machine';
 import {
@@ -182,6 +184,7 @@ export class AdvanceOrderUseCase {
   constructor(
     private readonly orders: OrderRepository,
     private readonly access: OrderAccessService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /**
@@ -236,7 +239,39 @@ export class AdvanceOrderUseCase {
       restock,
     });
 
+    // Announced after the transaction, never inside it: a customer's phone
+    // being unreachable must not roll back an order the kitchen has accepted.
+    this.announce(updated, as);
+
     return toOrderDto(updated, { includeTransactions: as === ActorType.ADMIN });
+  }
+
+  /**
+   * Pushes the transition to everyone watching.
+   *
+   * Two audiences, two rooms: the customer following their order, and the
+   * kitchen whose board the ticket sits on. Both are fire-and-forget — the
+   * state is already committed, and a websocket is a convenience on top of it.
+   */
+  private announce(order: OrderWithDetails, actor: ActorType): void {
+    this.realtime.orderStatusChanged({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      statusText: OrderStateMachine.describe(order.status),
+      actor,
+      at: new Date().toISOString(),
+    });
+
+    this.realtime.restaurantOrderUpdated(order.restaurantId, {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      totalAmount: Number(order.totalAmount),
+      itemCount: order.items.length,
+      customerName: order.customer.fullName,
+      placedAt: order.placedAt?.toISOString() ?? null,
+    });
   }
 }
 
@@ -246,6 +281,7 @@ export class CancelOrderUseCase {
     private readonly orders: OrderRepository,
     private readonly access: OrderAccessService,
     private readonly settings: DeliveryPricingRepository,
+    private readonly realtime: RealtimeService,
   ) {}
 
   async execute(
@@ -277,6 +313,25 @@ export class CancelOrderUseCase {
       actorUserId: actor.id,
       cancellationReason: reason ?? 'Cancelled by ' + as.toLowerCase(),
       restock,
+    });
+
+    this.realtime.orderStatusChanged({
+      orderId: updated.id,
+      orderNumber: updated.orderNumber,
+      status: updated.status,
+      statusText: OrderStateMachine.describe(updated.status),
+      actor: as,
+      at: new Date().toISOString(),
+    });
+
+    this.realtime.restaurantOrderUpdated(updated.restaurantId, {
+      orderId: updated.id,
+      orderNumber: updated.orderNumber,
+      status: updated.status,
+      totalAmount: Number(updated.totalAmount),
+      itemCount: updated.items.length,
+      customerName: updated.customer.fullName,
+      placedAt: updated.placedAt?.toISOString() ?? null,
     });
 
     return toOrderDto(updated, { includeTransactions: true });

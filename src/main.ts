@@ -11,6 +11,8 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 import { AppModule } from './app.module';
 import { ApiErrorResponseDto, ApiSuccessResponseDto } from './common/dto/api-response.dto';
+import { RedisService } from './infrastructure/redis/redis.service';
+import { RedisIoAdapter } from './modules/realtime/infrastructure/redis-io.adapter';
 import type { appConfig, swaggerConfig } from './config';
 import type { ConfigType } from '@nestjs/config';
 
@@ -48,6 +50,7 @@ function configureSwagger(
       .addTag('Payment Management', 'Refunds, reconciliation, the ledger and the callback log')
       .addTag('Notifications', 'A user’s own notifications, devices and delivery settings')
       .addTag('Notification Management', 'Campaigns, audiences and operator-sent messages')
+      .addTag('Realtime', 'The websocket protocol: rooms, events and reconnect behaviour')
       .addTag('Health', 'Liveness and readiness probes')
       .addServer(`http://localhost:${process.env.PORT ?? 3000}`, 'Local development')
       .build(),
@@ -130,6 +133,18 @@ async function bootstrap(): Promise<void> {
   if (swagger.enabled && !application.isProduction) {
     configureSwagger(app, swagger, globalPrefix);
   }
+
+  // Socket.IO, fanned out over Redis so events reach clients connected to any
+  // instance. Installed before listen, and tolerant of a Redis that is not
+  // there: a single instance still works, it simply cannot broadcast to others.
+  const socketAdapter = new RedisIoAdapter(
+    app,
+    app.get(RedisService).getClient(),
+    application,
+    logger,
+  );
+  await socketAdapter.connect();
+  app.useWebSocketAdapter(socketAdapter);
 
   // Lets Nest run `onModuleDestroy` hooks on SIGTERM, so Prisma and Redis
   // close cleanly instead of dropping in-flight work.

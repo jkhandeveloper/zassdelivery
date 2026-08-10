@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { CartsModule } from '../carts/carts.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OrdersModule } from '../orders/orders.module';
+import { RealtimeModule } from '../realtime/realtime.module';
 import { RiderSettingsService } from './application/services/rider-settings.service';
 import {
   ConfirmDeliveryUseCase,
@@ -69,7 +70,7 @@ import { RidersController } from './riders.controller';
   // drive the same state machine every other actor does; CartsModule supplies
   // the settings repository the fare and dispatch rates are read from; and
   // NotificationsModule carries the delivery code to the customer's phone.
-  imports: [OrdersModule, CartsModule, NotificationsModule],
+  imports: [OrdersModule, CartsModule, NotificationsModule, RealtimeModule],
   controllers: [RidersController, RiderManagementController],
   providers: [
     // Pure domain services: no dependencies, registered directly.

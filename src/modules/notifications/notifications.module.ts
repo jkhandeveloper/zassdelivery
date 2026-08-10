@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { RealtimeModule } from '../realtime/realtime.module';
 import { UsersModule } from '../users/users.module';
 import {
   CancelBroadcastUseCase,
@@ -44,8 +45,9 @@ import { PrismaNotificationRepository } from './infrastructure/repositories/pris
 @Module({
   // UsersModule supplies NotificationPreferenceRepository: the preference
   // matrix belongs to a user's profile and is edited there, while every
-  // decision to honour it is made here.
-  imports: [UsersModule],
+  // decision to honour it is made here. RealtimeModule delivers the same
+  // notification to a connected client immediately.
+  imports: [UsersModule, RealtimeModule],
   controllers: [NotificationsController, NotificationManagementController],
   providers: [
     // Pure domain service: no dependencies, registered directly.
