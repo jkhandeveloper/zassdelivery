@@ -33,7 +33,9 @@
       "Bash(curl -s __TRACKED_VAR__/riders/me/withdrawals -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
       "Bash(grep -oP \"Mapped \\\\{/api/payment[^}]*, [A-Z]+\\\\}\" /tmp/claude-1000/-var-www-zassdelivery/dee2c186-c48d-4f5b-9a54-a98fbb41d909/scratchpad/pay.log)",
       "Bash(rm -f token-*.txt)",
-      "Bash(bash pay-smoke.sh)"
+      "Bash(bash pay-smoke.sh)",
+      "Bash(sed -n '/^model NotificationPreference/,/^}/p' prisma/schema.prisma)",
+      "Bash(sed -n '/^enum NotificationType/,/^}/p;/^enum NotificationChannel/,/^}/p' prisma/schema.prisma)"
     ],
     "additionalDirectories": [
       "/tmp/claude-1000/-var-www-zassdelivery/dee2c186-c48d-4f5b-9a54-a98fbb41d909/scratchpad"

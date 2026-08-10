@@ -46,6 +46,8 @@ function configureSwagger(
         'Public gateway callbacks — authenticated by signature, not by token',
       )
       .addTag('Payment Management', 'Refunds, reconciliation, the ledger and the callback log')
+      .addTag('Notifications', 'A user’s own notifications, devices and delivery settings')
+      .addTag('Notification Management', 'Campaigns, audiences and operator-sent messages')
       .addTag('Health', 'Liveness and readiness probes')
       .addServer(`http://localhost:${process.env.PORT ?? 3000}`, 'Local development')
       .build(),

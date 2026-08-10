@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { CartsModule } from '../carts/carts.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { OrdersModule } from '../orders/orders.module';
 import { RiderSettingsService } from './application/services/rider-settings.service';
 import {
@@ -57,7 +58,7 @@ import { DeliveryOtpService } from './domain/services/delivery-otp.service';
 import { DispatchService } from './domain/services/dispatch.service';
 import { EarningsCalculator } from './domain/services/earnings.calculator';
 import { PrismaAssignmentRepository } from './infrastructure/repositories/prisma-assignment.repository';
-import { PrismaDeliveryNotificationAdapter } from './infrastructure/repositories/prisma-delivery-notification.adapter';
+import { NotifyDeliveryNotificationAdapter } from './infrastructure/repositories/notify-delivery-notification.adapter';
 import { PrismaRiderFinanceRepository } from './infrastructure/repositories/prisma-rider-finance.repository';
 import { PrismaRiderRepository } from './infrastructure/repositories/prisma-rider.repository';
 import { RiderManagementController } from './rider-management.controller';
@@ -66,8 +67,9 @@ import { RidersController } from './riders.controller';
 @Module({
   // OrdersModule supplies AdvanceOrderUseCase, so a rider's pickup and delivery
   // drive the same state machine every other actor does; CartsModule supplies
-  // the settings repository the fare and dispatch rates are read from.
-  imports: [OrdersModule, CartsModule],
+  // the settings repository the fare and dispatch rates are read from; and
+  // NotificationsModule carries the delivery code to the customer's phone.
+  imports: [OrdersModule, CartsModule, NotificationsModule],
   controllers: [RidersController, RiderManagementController],
   providers: [
     // Pure domain services: no dependencies, registered directly.
@@ -121,7 +123,7 @@ import { RidersController } from './riders.controller';
     { provide: RiderRepository, useClass: PrismaRiderRepository },
     { provide: AssignmentRepository, useClass: PrismaAssignmentRepository },
     { provide: RiderFinanceRepository, useClass: PrismaRiderFinanceRepository },
-    { provide: DeliveryNotificationPort, useClass: PrismaDeliveryNotificationAdapter },
+    { provide: DeliveryNotificationPort, useClass: NotifyDeliveryNotificationAdapter },
   ],
   exports: [RiderRepository, AssignmentRepository],
 })

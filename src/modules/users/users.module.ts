@@ -80,6 +80,9 @@ import { UsersController } from './users.controller';
       useClass: PrismaNotificationPreferenceRepository,
     },
   ],
-  exports: [UserRepository, AddressRepository],
+  // NotificationPreferenceRepository is exported for the notifications module:
+  // the preference matrix is edited here as part of a profile, and honoured
+  // there on every send.
+  exports: [UserRepository, AddressRepository, NotificationPreferenceRepository],
 })
 export class UsersModule {}

@@ -315,6 +315,41 @@ enum PayoutMethod {
   @@map("payout_method")
 }
 
+enum DevicePlatform {
+  ANDROID
+  IOS
+  WEB
+
+  @@map("device_platform")
+}
+
+enum BroadcastAudience {
+  /// Every active account.
+  ALL
+  /// Everyone holding one role — all riders, all vendors.
+  ROLE
+  /// Everyone whose default address falls in a zone.
+  ZONE
+  /// Customers who have ordered at least once.
+  ACTIVE_CUSTOMERS
+  /// A list of user ids supplied with the broadcast.
+  USER_IDS
+
+  @@map("broadcast_audience")
+}
+
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  /// Every recipient failed; nothing was delivered.
+  FAILED
+  CANCELLED
+
+  @@map("broadcast_status")
+}
+
 enum WebhookStatus {
   /// Stored, not yet interpreted.
   RECEIVED
@@ -473,6 +508,8 @@ model User {
   refreshTokens           RefreshToken[]
   notificationPreferences NotificationPreference[]
   cart                    Cart?
+  deviceTokens            DeviceToken[]
+  broadcastsCreated       Broadcast[]              @relation("BroadcastAuthor")
   driversApproved         Driver[]                 @relation("DriverApprover")
   driverDocumentsReviewed DriverDocument[]         @relation("DriverDocumentReviewer")
   assignmentsDispatched   DeliveryAssignment[]     @relation("AssignmentDispatcher")
@@ -604,6 +641,7 @@ model Zone {
   restaurants  Restaurant[]
   drivers      Driver[]
   orders       Order[]
+  broadcasts   Broadcast[]
   deliveryFees DeliveryFee[]
   coupons      Coupon[]
 
@@ -1721,13 +1759,115 @@ model Notification {
   readAt DateTime? @map("read_at") @db.Timestamptz(3)
   sentAt DateTime? @map("sent_at") @db.Timestamptz(3)
 
+  /// Set when the campaign this message belongs to sent it.
+  broadcastId String? @map("broadcast_id")
+
+  // ── Push delivery ──
+  // The in-app row exists whether or not a push went out. These record what
+  // happened on the push leg, so "I never got a notification" is answerable
+  // without going to Firebase.
+  pushSentAt DateTime? @map("push_sent_at") @db.Timestamptz(3)
+  pushError  String?   @map("push_error") @db.VarChar(300)
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  broadcast Broadcast? @relation(fields: [broadcastId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead, createdAt])
+  @@index([userId, type, createdAt])
+  @@index([broadcastId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+/// A device that can receive a push.
+///
+/// One row per installation rather than one token per user: people carry a
+/// phone and a tablet, and a notification that only reaches whichever device
+/// logged in last is a notification that gets missed.
+model DeviceToken {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+
+  /// The FCM registration token. Unique, because Firebase reissues the same
+  /// token to whichever account currently holds the installation — the row
+  /// moves to the new user rather than being duplicated.
+  token    String         @unique @db.VarChar(500)
+  platform DevicePlatform @default(ANDROID)
+
+  /// Stable per-installation id, so a refreshed token replaces its predecessor
+  /// instead of leaving a dead row behind.
+  deviceId   String? @map("device_id") @db.VarChar(120)
+  deviceName String? @map("device_name") @db.VarChar(120)
+  appVersion String? @map("app_version") @db.VarChar(40)
+
+  isActive     Boolean @default(true) @map("is_active")
+  /// Consecutive send failures. Firebase telling us a token is dead retires it
+  /// immediately; softer failures retire it once they stop being flukes.
+  failureCount Int     @default(0) @map("failure_count")
+  lastError    String? @map("last_error") @db.VarChar(300)
+
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, isRead, createdAt])
+  @@index([userId, isActive])
+  @@index([isActive, lastUsedAt])
+  @@map("device_tokens")
+}
+
+/// One admin-sent campaign.
+///
+/// Kept as its own record rather than as a pile of identical notifications so
+/// that "who did we send this to, and did it arrive" has a single row to
+/// answer it — and so a campaign can be composed, reviewed and scheduled before
+/// anybody receives anything.
+model Broadcast {
+  id String @id @default(cuid())
+
+  title String           @db.VarChar(160)
+  body  String           @db.VarChar(1000)
+  type  NotificationType @default(PROMOTION)
+  data  Json?
+
+  audience   BroadcastAudience @default(ALL)
+  /// Narrows ROLE and ZONE audiences; ignored by the others.
+  roleFilter UserRole?         @map("role_filter")
+  zoneId     String?           @map("zone_id")
+  /// Explicit recipients for a USER_IDS audience.
+  userIds    String[]          @map("user_ids")
+
+  /// Channels this campaign may use, intersected with each recipient's own
+  /// preferences before anything is sent.
+  channels NotificationChannel[]
+
+  status BroadcastStatus @default(DRAFT)
+
+  recipientCount Int @default(0) @map("recipient_count")
+  deliveredCount Int @default(0) @map("delivered_count")
+  failedCount    Int @default(0) @map("failed_count")
+  /// Recipients whose own preferences ruled them out. Not a failure.
+  skippedCount   Int @default(0) @map("skipped_count")
+
+  scheduledFor DateTime? @map("scheduled_for") @db.Timestamptz(3)
+  startedAt    DateTime? @map("started_at") @db.Timestamptz(3)
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz(3)
+  error        String?   @db.VarChar(500)
+
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy     User?          @relation("BroadcastAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  zone          Zone?          @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  notifications Notification[]
+
+  @@index([status, scheduledFor])
   @@index([createdAt])
-  @@map("notifications")
+  @@map("broadcasts")
 }
 
 // ═════════════════════════════════════════════════════════════

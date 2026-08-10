@@ -56,6 +56,10 @@ const PERMISSION_MATRIX: Record<string, string[]> = {
   /// Rider withdrawals. Separate from `payments` so a dispatcher can work the
   /// board without also being able to move riders' money out of the platform.
   payouts: ['read', 'approve'],
+  /// Campaigns. Composing one and sending it are separate capabilities: an
+  /// operator can draft a promotion without being able to put it in front of
+  /// every customer on the platform.
+  notifications: ['read', 'create', 'send'],
   coupons: ['read', 'create', 'update', 'delete'],
   reviews: ['read', 'moderate'],
   tickets: ['read', 'create', 'update', 'assign', 'close'],
@@ -1134,6 +1138,30 @@ async function seedContent(): Promise<void> {
       group: 'auth',
       isPublic: false,
       description: 'Failed OTP attempts before lockout.',
+    },
+    {
+      key: 'notifications.promo_quiet_hours_start',
+      value: '22',
+      valueType: SettingValueType.NUMBER,
+      group: 'notifications',
+      isPublic: true,
+      description: 'Hour after which promotional pushes are held back. Order updates ignore it.',
+    },
+    {
+      key: 'notifications.promo_quiet_hours_end',
+      value: '8',
+      valueType: SettingValueType.NUMBER,
+      group: 'notifications',
+      isPublic: true,
+      description: 'Hour at which promotional pushes resume.',
+    },
+    {
+      key: 'notifications.retention_days',
+      value: '90',
+      valueType: SettingValueType.NUMBER,
+      group: 'notifications',
+      isPublic: false,
+      description: 'How long read notifications are kept before the sweep drops them.',
     },
     {
       key: 'payments.checkout_ttl_minutes',

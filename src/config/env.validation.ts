@@ -202,6 +202,40 @@ export class EnvironmentVariables {
   @IsString()
   EASYPAISA_API_URL?: string;
 
+  // ── Notifications ──
+  // Firebase credentials come from a service-account key and are absent in
+  // development, so all three are optional: push reports itself unavailable
+  // rather than failing at send time, and in-app notifications keep working.
+  @IsOptional()
+  @IsString()
+  FCM_PROJECT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  FCM_CLIENT_EMAIL?: string;
+
+  @IsOptional()
+  @IsString()
+  FCM_PRIVATE_KEY?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  PUSH_CONCURRENCY: number = 25;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(50)
+  @Max(5000)
+  BROADCAST_BATCH_SIZE: number = 500;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  PUSH_MAX_FAILURES: number = 5;
+
   // ── Market defaults ──
   @IsString()
   @Matches(/^\+\d{1,4}$/, { message: 'DEFAULT_COUNTRY_CODE must look like "+92"' })

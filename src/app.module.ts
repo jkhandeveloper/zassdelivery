@@ -8,6 +8,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { CartsModule } from './modules/carts/carts.module';
 import { MenusModule } from './modules/menus/menus.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { RestaurantsModule } from './modules/restaurants/restaurants.module';
@@ -57,6 +58,7 @@ import { SharedModule } from './shared/shared.module';
     OrdersModule,
     RidersModule,
     PaymentsModule,
+    NotificationsModule,
     HealthModule,
   ],
 })

@@ -20,8 +20,9 @@ Built with NestJS 11, PostgreSQL 16 + Prisma, Redis, and TypeScript in strict mo
 | **8**     | Orders — placement, lifecycle state machine, timeline, refunds, invoice, transactions               | ✅ Complete |
 | **9**     | Riders — onboarding, documents, approval, dispatch, delivery OTP, earnings, wallet, withdrawals     | ✅ Complete |
 | **10**    | Payments — COD, JazzCash, Easypaisa, verification, webhooks, refunds, invoices, ledger              | ✅ Complete |
-| 11        | Notifications, ratings, admin analytics                                                             | Planned     |
-| 12        | Live tracking over Socket.IO                                                                        | Planned     |
+| **11**    | Notifications — FCM push, device registry, history, preferences, admin broadcasts                   | ✅ Complete |
+| 12        | Ratings and admin analytics                                                                         | Planned     |
+| 13        | Live tracking over Socket.IO                                                                        | Planned     |
 
 ---
 
@@ -933,9 +934,134 @@ set `PUBLIC_BASE_URL` to something a gateway can actually reach; it cannot call
 
 ---
 
+### Notifications — `/notifications` and `/notification-management`
+
+| Method | Path                                    | Who                                     |
+| ------ | --------------------------------------- | --------------------------------------- |
+| GET    | `/notifications`                        | Own history, newest first               |
+| GET    | `/notifications/unread-count`           | The badge, grouped by category          |
+| POST   | `/notifications/:id/read` · `/read-all` | Mark as read                            |
+| DELETE | `/notifications/:id` · `/read`          | Remove one, or clear what has been read |
+| GET    | `/notifications/preferences`            | What would actually reach me right now  |
+| POST   | `/notifications/devices`                | Register this phone for push            |
+| GET    | `/notifications/devices`                | My registered devices, tokens masked    |
+| POST   | `/notifications/devices/unregister`     | Sign this device out                    |
+| DELETE | `/notifications/devices`                | Sign every device out                   |
+| POST   | `/notifications/devices/test`           | Send myself a test push                 |
+
+| Method | Path                                               | Permission             |
+| ------ | -------------------------------------------------- | ---------------------- |
+| POST   | `/notification-management/broadcasts`              | `notifications.create` |
+| GET    | `/notification-management/broadcasts` · `/:id`     | `notifications.read`   |
+| PATCH  | `/notification-management/broadcasts/:id`          | `notifications.create` |
+| GET    | `/notification-management/broadcasts/:id/preview`  | `notifications.read`   |
+| POST   | `/notification-management/broadcasts/:id/send`     | `notifications.send`   |
+| POST   | `/notification-management/broadcasts/:id/cancel`   | `notifications.create` |
+| POST   | `/notification-management/broadcasts/dispatch-due` | `notifications.send`   |
+| POST   | `/notification-management/notify`                  | `notifications.send`   |
+
+Composing a campaign and sending it are separate permissions: an operator can
+draft a promotion without being able to put it in front of every customer on the
+platform.
+
+#### One way in
+
+Every module that needs to tell somebody something calls `NotifyService` rather
+than writing notification rows or talking to Firebase. That is what makes
+preferences mean anything — a preference honoured by four senders out of five is
+not a preference, and the fifth is always the one a complaint is about. The
+riders module's delivery codes go through it too, which is why they now arrive as
+a push rather than only appearing in a list the customer has to go and open.
+
+Notifications are best-effort by design. A push that fails must never fail the
+order, the refund or the delivery that prompted it: the caller's work has already
+happened, and a lost message is a support ticket where a rolled-back transaction
+is a disaster.
+
+The in-app row is written first and is the record that matters. It survives a
+push that never lands, so a customer whose phone was off still finds the message
+waiting.
+
+#### Preferences
+
+The matrix — five categories × four channels — is edited at
+`PATCH /me/notification-preferences`, where it belongs to a profile.
+`GET /notifications/preferences` answers the question those routes cannot: push
+is switched on, so why is nothing arriving? Usually no registered device, no
+Firebase credentials on this deployment, or quiet hours — none of which are
+visible from the stored rows.
+
+Defaults favour being told: in-app and push on everywhere, SMS off across the
+board because it costs money per message in this market and an unsolicited one is
+worse than no message.
+
+Promotional pushes are held back between 22:00 and 08:00. Order, wallet and
+support messages are not — "your rider is outside" at 3am is exactly the
+notification somebody wants at 3am. The in-app copy is still written during quiet
+hours, so nothing is lost, only delayed.
+
+#### Devices
+
+`users.push_token` held one token per account, which meant a notification only
+reached whichever device logged in last. `device_tokens` holds one row per
+installation instead.
+
+Two rules keep that list honest. A refreshed token on a known `deviceId` retires
+its predecessor, so Firebase's own token rotation does not leave dead rows
+behind. And a token arriving under a different user is treated as a handover, not
+a duplicate — Firebase reissues the same token to whichever account currently
+holds the installation, and the previous owner must stop receiving that phone's
+pushes.
+
+After a send, Firebase's verdict is applied: `UNREGISTERED` retires the token at
+once, while a timeout or a 503 only counts a strike. Retiring on a bad night
+would cost a real customer their notifications; never retiring leaves the
+platform pushing at uninstalled apps forever.
+
+#### Broadcasts
+
+Three steps, deliberately: compose, preview the audience, send. A broadcast is
+the one action here that reaches every customer at once, and nobody should
+discover the size of an audience by sending to it — `ALL` reads exactly the same
+in a form as a narrow role filter does.
+
+An audience missing its filter is rejected rather than run, because it widens
+silently: `ROLE` with no role is every account on the platform.
+
+The fan-out walks the audience by keyset in batches, writing delivery counts back
+as it goes, so a long campaign shows progress instead of a number that appears at
+the end. Each recipient's own preferences still apply — a customer who muted
+promotions is counted as **skipped**, not failed, and a campaign where everyone
+opted out is a success, not an incident. A campaign that reaches nobody is marked
+`FAILED` with its reason rather than left `SENDING` forever.
+
+#### Firebase Cloud Messaging
+
+Written against the HTTP v1 REST API rather than `firebase-admin`: the platform
+needs one call from that SDK, and the whole of what it would provide is a signed
+JWT, an OAuth exchange and a POST — about forty megabytes of transitive packages
+for three things that still need the same error handling underneath.
+
+The service-account key signs an RS256 assertion, which is exchanged for an
+access token and cached until shortly before expiry. Concurrent sends share one
+exchange rather than triggering twenty-five. HTTP v1 has no batch endpoint — even
+the official SDK loops — so the fan-out runs at a fixed concurrency instead of
+opening a socket per phone.
+
+Credentials are optional. Without them push reports itself unavailable through
+`GET /notifications/preferences` and `/devices/test`, and in-app notifications
+carry on working. Set `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL` and `FCM_PRIVATE_KEY`
+(escaped `\n` intact) to switch it on.
+
+> The FCM adapter is covered by tests against a stubbed transport — signing,
+> token caching, batching, dead-token detection and every failure path. It has
+> not been run against a live Firebase project, which no test can stand in for.
+
+---
+
 ## Data model
 
-55 tables across eleven domains. `User` and `Order` are the two hubs: almost
+58 tables across eleven domains. `User` and `Order` are the two hubs: almost
 every table reaches one of them within a single hop.
 
 ```mermaid
@@ -987,6 +1113,8 @@ erDiagram
 
     USER ||--o{ FAVORITE : "saves"
     USER ||--o{ NOTIFICATION : "receives"
+    USER ||--o{ DEVICE_TOKEN : "carries"
+    BROADCAST ||--o{ NOTIFICATION : "fans out"
     USER ||--o{ SUPPORT_TICKET : "opens"
     SUPPORT_TICKET ||--o{ SUPPORT_TICKET_MESSAGE : "thread"
     USER ||--o{ AUDIT_LOG : "acts"
@@ -1003,7 +1131,7 @@ erDiagram
 | Delivery          | `drivers`, `vehicles`, `driver_documents`, `delivery_assignments`                                                                                     |
 | Orders            | `orders`, `order_items`, `order_item_add_ons`, `order_status_history`                                                                                 |
 | Money             | `payments`, `transactions`, `wallets`, `wallet_transactions`, `coupons`, `coupon_redemptions`, `driver_earnings`, `payout_requests`, `webhook_events` |
-| Engagement        | `favorites`, `reviews`, `notifications`                                                                                                               |
+| Engagement        | `favorites`, `reviews`, `notifications`, `device_tokens`, `broadcasts`                                                                                |
 | Operations        | `support_tickets`, `support_ticket_messages`, `audit_logs`                                                                                            |
 | Content           | `banners`, `settings`, `faqs`                                                                                                                         |
 
@@ -1058,14 +1186,14 @@ moment, which is exactly when application-level checks do not.
 
 | Phone           | Role                                                    |
 | --------------- | ------------------------------------------------------- |
-| `+923000000001` | `SUPER_ADMIN` (all 53 permissions)                      |
+| `+923000000001` | `SUPER_ADMIN` (all 56 permissions)                      |
 | `+923000000002` | `ADMIN`                                                 |
 | `+923001234567` | `CUSTOMER` — default Pabbi address, one delivered order |
 | `+923009876543` | `RIDER` — motorcycle `PES-4821`, documents verified     |
 | `+923005551234` | `VENDOR_OWNER` — Chapli Kabab House                     |
 
-Also seeded: 6 roles · 53 permissions · 3 cities · 9 zones · 27 delivery-fee
-bands · 3 restaurants with menus · 10 menu items · 3 coupons · 21 settings ·
+Also seeded: 6 roles · 56 permissions · 3 cities · 9 zones · 27 delivery-fee
+bands · 3 restaurants with menus · 10 menu items · 3 coupons · 24 settings ·
 5 FAQs · 2 approved riders with verified documents · and one fully delivered
 order with its payment, ledger entries, dispatch assignment, itemised rider
 earnings, wallet movements, review and notification.

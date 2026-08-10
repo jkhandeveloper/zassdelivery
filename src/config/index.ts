@@ -2,6 +2,7 @@ import { appConfig } from './app.config';
 import { databaseConfig } from './database.config';
 import { jwtConfig } from './jwt.config';
 import { loggerConfig } from './logger.config';
+import { notificationsConfig } from './notifications.config';
 import { paymentsConfig } from './payments.config';
 import { redisConfig } from './redis.config';
 import { swaggerConfig } from './swagger.config';
@@ -12,6 +13,7 @@ export * from './database.config';
 export * from './env.validation';
 export * from './jwt.config';
 export * from './logger.config';
+export * from './notifications.config';
 export * from './payments.config';
 export * from './redis.config';
 export * from './swagger.config';
@@ -27,4 +29,5 @@ export const configurations = [
   throttleConfig,
   swaggerConfig,
   paymentsConfig,
+  notificationsConfig,
 ];
