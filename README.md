@@ -21,8 +21,9 @@ Built with NestJS 11, PostgreSQL 16 + Prisma, Redis, and TypeScript in strict mo
 | **9**     | Riders — onboarding, documents, approval, dispatch, delivery OTP, earnings, wallet, withdrawals     | ✅ Complete |
 | **10**    | Payments — COD, JazzCash, Easypaisa, verification, webhooks, refunds, invoices, ledger              | ✅ Complete |
 | **11**    | Notifications — FCM push, device registry, history, preferences, admin broadcasts                   | ✅ Complete |
-| 12        | Ratings and admin analytics                                                                         | Planned     |
+| **12**    | Admin — dashboard, reports, coupons, banners, settings, support tickets, audit log                  | ✅ Complete |
 | **13**    | Realtime — Socket.IO rooms, live order and rider tracking, Redis adapter, reconnect                 | ✅ Complete |
+| 14        | Ratings and reviews                                                                                 | Planned     |
 
 ---
 
@@ -1158,6 +1159,122 @@ back an order because somebody's wifi dropped.
 
 ---
 
+### Admin — `/admin`, `/coupons`, `/banners`, `/settings`, `/support-tickets`, `/audit-logs`
+
+Users, restaurants, orders and payments already have their own admin routes
+(`/users`, `/restaurant-management`, `/order-management`, `/payment-management`).
+This module adds what none of them owns.
+
+| Method | Path                                                    | Permission             |
+| ------ | ------------------------------------------------------- | ---------------------- |
+| GET    | `/admin/dashboard`                                      | `analytics.read`       |
+| GET    | `/admin/reports/sales`                                  | `analytics.read`       |
+| GET    | `/admin/reports/restaurants` · `/riders` · `/customers` | `analytics.read`       |
+| GET    | `/admin/reports/zones` · `/coupons` · `/cancellations`  | `analytics.read`       |
+| GET    | `/coupons/available`                                    | Any signed-in customer |
+| GET    | `/coupons` · `/coupons/:id`                             | `coupons.read`         |
+| POST   | `/coupons`                                              | `coupons.create`       |
+| PATCH  | `/coupons/:id` · POST `/:id/activate` · `/deactivate`   | `coupons.update`       |
+| DELETE | `/coupons/:id`                                          | `coupons.delete`       |
+| GET    | `/banners`                                              | **Public**             |
+| GET    | `/banner-management`                                    | `banners.read`         |
+| POST   | `/banner-management` · PUT `/order` · PATCH · DELETE    | `banners.*`            |
+| GET    | `/settings/public`                                      | **Public**             |
+| GET    | `/settings`                                             | `settings.read`        |
+| PUT    | `/settings` · DELETE `/settings/:key`                   | `settings.update`      |
+| POST   | `/support-tickets` · GET · POST `/:id/messages`         | Any signed-in user     |
+| PATCH  | `/support-tickets/:id/status` · `/assign` · `/priority` | `tickets.*`            |
+| GET    | `/audit-logs` · `/:entityType/:entityId`                | `audit.read`           |
+
+`analytics.read` is deliberately a lower bar than the permissions that change
+things: an operations lead should be able to see how the business is doing
+without also being able to refund an order.
+
+#### The dashboard
+
+One response, because a dashboard that makes six calls renders in six stages.
+It carries three things: how today is going, what is **waiting on somebody**, and
+who is actually working right now — plus a fortnight of trend.
+
+The queues block is the part that is really a to-do list; every number in it has
+a screen behind it. `ordersAwaitingRider` — cooking or cooked with nobody to
+carry it — is the one that turns into a cold delivery if nobody watches it.
+`actionsRequired` sums the lot, so a single number answers "does anything need a
+person right now".
+
+Revenue counts orders that were paid for or will be. Cancellations are excluded,
+because counting them would flatter every figure on the page and the flattery
+grows with the failure rate.
+
+#### Coupons
+
+A coupon is the one thing an operator can create that spends money directly, so
+its shape is checked before it is saved rather than at redemption — a malformed
+one is found by customers well before it is found by finance.
+
+A percentage coupon must carry a ceiling: without one, "50% off" on a large order
+is an open-ended liability, and the largest orders are exactly the ones that find
+it. A fixed discount cannot exceed the minimum order it applies to, or the
+platform pays the customer to order. Edits are validated against the **merged**
+result rather than the patch, because a change that is harmless alone can still
+produce an incoherent coupon.
+
+`isLive` is computed rather than read off `isActive`, because being live is three
+conditions — active, inside its window, and not exhausted — and a coupon can be
+all of `isActive` and still unusable.
+
+A redeemed coupon is deactivated rather than deleted: orders reference it, and
+deleting one rewrites the discount out of somebody's receipt.
+
+#### Settings
+
+Stored as text because the table holds every kind at once, but returned with a
+`typedValue` coerced to the declared type — a client parsing `"5"` into a number
+by convention is a client that will one day parse `"false"` into `true`.
+
+Writes are all-or-nothing: related settings are meaningless apart, and a
+quiet-hours start applied without its end is a window nobody configured. Values
+are checked against their declared type first, so a NUMBER setting cannot be
+saved as `"five"` and discovered later by the pricing engine.
+
+`/settings/public` is public and returns only the entries flagged as such;
+private configuration never leaves the API.
+
+#### Support tickets
+
+One set of routes rather than a customer copy and a staff copy — it is the same
+thread, and what differs is what each side may see of it.
+
+Internal notes are the difference: agents hand a thread over by writing to each
+other inside it, and none of that reaches the customer. A customer's reply moves
+a resolved or waiting ticket back into the queue, because that reply _is_ what
+was being waited for, and leaving it marked resolved is how a complaint quietly
+stops being anybody's job. A closed ticket is a deliberate dead end — a queue you
+can never empty is not a queue.
+
+#### Audit log
+
+Written by a **global interceptor**, not by each feature. An audit trail that
+every module has to remember to write to has holes in exactly the places somebody
+wanted them, and the holes are invisible until the day somebody asks who changed
+a commission rate.
+
+Deliberately narrow: only mutations, only by staff, and only after they succeed.
+Reads are not interesting, a customer editing their own address is not an audit
+event, and a rejected request changed nothing.
+
+Sensitive fields — passwords, tokens, CNICs, account numbers, gateway secrets —
+are redacted before anything is written. An audit log is read by more people than
+the systems holding the original data and is kept for longer; a secret copied
+into it has quietly become less protected than it was.
+
+Each entry carries the `requestId`, which ties it to the access log line and
+every other record of the same request. `GET /audit-logs/:entityType/:entityId`
+answers the question the log exists for — "who changed this, and to what" —
+oldest first, because a record's history reads as a story.
+
+---
+
 ## Data model
 
 58 tables across eleven domains. `User` and `Order` are the two hubs: almost
@@ -1269,6 +1386,10 @@ language cannot express them:
   items, dispatchable riders, in-flight orders, unread notifications — plus
   partial _unique_ indexes for one default address per user and one primary
   vehicle per driver.
+
+`20260810200000_support_ticket_sequence` adds the ticket reference sequence and
+the partial indexes behind the support queue, the live banner feed and the live
+coupon list.
 
 `20260809000000_rider_dispatch_documents_and_payouts` adds the dispatch
 guarantees in the same style — one live assignment per order, one accepted

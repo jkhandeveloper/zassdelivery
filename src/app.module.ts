@@ -4,6 +4,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 
 import { CommonModule } from './common/common.module';
 import { configurations, throttleConfig, validateEnvironment } from './config';
+import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { CartsModule } from './modules/carts/carts.module';
@@ -61,6 +62,7 @@ import { SharedModule } from './shared/shared.module';
     PaymentsModule,
     NotificationsModule,
     RealtimeModule,
+    AdminModule,
     HealthModule,
   ],
 })
