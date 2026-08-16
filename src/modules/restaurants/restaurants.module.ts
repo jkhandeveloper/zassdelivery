@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AuthModule } from '../auth/auth.module';
 import { UsersModule } from '../users/users.module';
 import {
   CreateCategoryUseCase,
@@ -38,11 +39,17 @@ import { PrismaRestaurantRepository } from './infrastructure/repositories/prisma
 import { RestaurantCategoriesController } from './restaurant-categories.controller';
 import { RestaurantManagementController } from './restaurant-management.controller';
 import { RestaurantsController } from './restaurants.controller';
+import {
+  ListRestaurantStaffUseCase,
+  RegisterRestaurantStaffUseCase,
+} from './application/use-cases/staff.use-cases';
 
 @Module({
-  // UsersModule supplies AddressRepository, whose resolveZone() decides which
-  // delivery zone a restaurant's coordinates fall into.
-  imports: [UsersModule],
+  // UsersModule supplies UserRepository (for staff accounts) and
+  // AddressRepository, whose resolveZone() decides which delivery zone a
+  // restaurant's coordinates fall into. AuthModule supplies PasswordService
+  // for owner-created staff accounts.
+  imports: [UsersModule, AuthModule],
   controllers: [
     RestaurantsController,
     RestaurantManagementController,
@@ -76,6 +83,9 @@ import { RestaurantsController } from './restaurants.controller';
     CreateCategoryUseCase,
     UpdateCategoryUseCase,
     DeleteCategoryUseCase,
+
+    RegisterRestaurantStaffUseCase,
+    ListRestaurantStaffUseCase,
 
     { provide: RestaurantRepository, useClass: PrismaRestaurantRepository },
     { provide: RestaurantCategoryRepository, useClass: PrismaRestaurantCategoryRepository },

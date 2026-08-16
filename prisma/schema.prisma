@@ -476,6 +476,12 @@ model User {
   role   UserRole   @default(CUSTOMER)
   status UserStatus @default(PENDING_VERIFICATION)
 
+  /// Set only for VENDOR_STAFF: the single restaurant this account works for.
+  /// A staff account created by one vendor must never be usable against
+  /// another vendor's listing, so this is baked into the access token rather
+  /// than re-derived per request.
+  staffRestaurantId String? @map("staff_restaurant_id")
+
   /// Device token for push notifications.
   pushToken   String?   @map("push_token") @db.VarChar(500)
   lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz(3)
@@ -489,6 +495,7 @@ model User {
   roleAssignments         UserRoleAssignment[]
   restaurantsOwned        Restaurant[]             @relation("RestaurantOwner")
   restaurantsApproved     Restaurant[]             @relation("RestaurantApprover")
+  staffRestaurant         Restaurant?              @relation("RestaurantStaff", fields: [staffRestaurantId], references: [id], onDelete: SetNull)
   driverProfile           Driver?
   wallet                  Wallet?
   orders                  Order[]
@@ -519,6 +526,7 @@ model User {
   @@index([status, createdAt])
   @@index([deletedAt])
   @@index([createdAt])
+  @@index([staffRestaurantId])
   @@map("users")
 }
 
@@ -826,6 +834,7 @@ model Restaurant {
   favorites    Favorite[]
   coupons      Coupon[]
   banners      Banner[]
+  staffMembers User[]                         @relation("RestaurantStaff")
   /// Full-text search vector, maintained by Postgres as a generated column.
   /// Declared here so migrations do not propose dropping it; it is never read
   /// through the Prisma client, only through raw SQL in the search repository.

@@ -26,6 +26,12 @@ export class UserDto {
   @ApiProperty({ enum: UserStatus })
   status!: UserStatus;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Set only for VENDOR_STAFF: the restaurant this account works for.',
+  })
+  staffRestaurantId?: string | null;
+
   @ApiProperty({ example: true })
   isPhoneVerified!: boolean;
 
@@ -112,6 +118,7 @@ export function toUserDto(user: User, includeDeletedAt = false): UserDto {
     locale: user.locale,
     role: user.role,
     status: user.status,
+    staffRestaurantId: user.staffRestaurantId,
     isPhoneVerified: user.phoneVerifiedAt !== null,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,

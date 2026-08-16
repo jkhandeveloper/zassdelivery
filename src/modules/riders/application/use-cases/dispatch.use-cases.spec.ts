@@ -27,6 +27,7 @@ const DISPATCHER: AuthenticatedUser = {
   phone: '+923000000001',
   role: UserRole.ADMIN,
   permissions: ['orders.assign'],
+  staffRestaurantId: null,
   sessionId: 'session-1',
 };
 

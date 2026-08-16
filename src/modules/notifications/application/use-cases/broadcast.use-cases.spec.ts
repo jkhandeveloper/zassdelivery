@@ -29,6 +29,7 @@ const ADMIN: AuthenticatedUser = {
   phone: '+923000000001',
   role: UserRole.ADMIN,
   permissions: ['notifications.send'],
+  staffRestaurantId: null,
   sessionId: 'session-1',
 };
 

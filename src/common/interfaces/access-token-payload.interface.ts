@@ -7,6 +7,8 @@ export interface AccessTokenPayload {
   phone: string;
   role: UserRole;
   permissions: string[];
+  /** Set only for VENDOR_STAFF: the single restaurant this account works for. */
+  staffRestaurantId?: string | null;
   /** Session id, shared with the refresh-token family so logout can target it. */
   sid: string;
   /** Issued-at and expiry, populated by the signer. */

@@ -101,8 +101,11 @@ export class OrderAccessService {
 
     if (actor.role === UserRole.VENDOR_OWNER || actor.role === UserRole.VENDOR_STAFF) {
       const restaurant = await this.restaurants.findById(order.restaurantId, true);
+      const worksHere =
+        restaurant !== null &&
+        (restaurant.ownerId === actor.id || actor.staffRestaurantId === restaurant.id);
 
-      if (restaurant && restaurant.ownerId === actor.id) {
+      if (worksHere) {
         return ActorType.RESTAURANT;
       }
     }

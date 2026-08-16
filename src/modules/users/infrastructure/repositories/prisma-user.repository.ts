@@ -80,6 +80,7 @@ export class PrismaUserRepository extends UserRepository {
           email: input.email ?? null,
           passwordHash: input.passwordHash ?? null,
           status: input.status ?? UserStatus.ACTIVE,
+          staffRestaurantId: input.staffRestaurantId ?? null,
         },
       });
 
@@ -134,6 +135,13 @@ export class PrismaUserRepository extends UserRepository {
     return this.prisma.user.update({
       where: { id },
       data: { deletedAt: null, status: UserStatus.ACTIVE },
+    });
+  }
+
+  async findStaffByRestaurant(restaurantId: string): Promise<User[]> {
+    return this.prisma.user.findMany({
+      where: { staffRestaurantId: restaurantId, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
     });
   }
 

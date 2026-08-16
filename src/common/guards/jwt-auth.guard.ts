@@ -78,6 +78,7 @@ export class JwtAuthGuard implements CanActivate {
       phone: payload.phone,
       role: payload.role,
       permissions: payload.permissions,
+      staffRestaurantId: payload.staffRestaurantId ?? null,
       sessionId: payload.sid,
     };
 

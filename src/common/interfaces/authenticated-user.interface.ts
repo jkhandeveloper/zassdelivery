@@ -13,6 +13,8 @@ export interface AuthenticatedUser {
   role: UserRole;
   /** Flattened `resource.action` codes granted by every role the user holds. */
   permissions: string[];
+  /** Set only for VENDOR_STAFF: the single restaurant this account works for. */
+  staffRestaurantId: string | null;
   /** Session family, so a single device can be logged out on its own. */
   sessionId: string;
 }

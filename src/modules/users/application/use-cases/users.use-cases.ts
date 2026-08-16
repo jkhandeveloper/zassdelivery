@@ -80,6 +80,8 @@ export class CreateUserUseCase {
       email: dto.email ?? null,
       passwordHash: dto.password ? await this.passwords.hash(dto.password) : null,
       status: dto.status ?? UserStatus.ACTIVE,
+      staffRestaurantId:
+        dto.role === UserRole.VENDOR_STAFF ? (dto.staffRestaurantId ?? null) : null,
     });
 
     return toUserDto(user, true);

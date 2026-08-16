@@ -14,8 +14,19 @@ import { PasswordService } from '../services/password.service';
 import { TokenService } from '../services/token.service';
 import { toAuthResponse } from './auth.mapper';
 
-/** Roles a member of the public may create for themselves. */
-const SELF_SERVICE_ROLES: UserRole[] = [UserRole.CUSTOMER, UserRole.RIDER];
+/**
+ * Roles a member of the public may create for themselves.
+ *
+ * VENDOR_OWNER is here because a vendor should not have to wait on an
+ * administrator just to create an account before onboarding a restaurant.
+ * The account is active immediately, but that restaurant still lands in
+ * PENDING_APPROVAL and only a super admin's approve/reject decides whether it
+ * ever goes live — self-service registration and business approval are two
+ * separate gates. VENDOR_STAFF is deliberately absent: those accounts are
+ * created by the vendor owner through the restaurant, not through this
+ * endpoint, so they always carry the restaurant they belong to.
+ */
+const SELF_SERVICE_ROLES: UserRole[] = [UserRole.CUSTOMER, UserRole.RIDER, UserRole.VENDOR_OWNER];
 
 export interface RegisterContext {
   userAgent?: string;

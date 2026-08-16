@@ -26,6 +26,7 @@ const REVIEWER: AuthenticatedUser = {
   phone: '+923000000001',
   role: UserRole.ADMIN,
   permissions: ['drivers.approve'],
+  staffRestaurantId: null,
   sessionId: 'session-1',
 };
 

@@ -80,6 +80,14 @@ export class CreateUserDto {
   @IsEnum(UserRole)
   role!: UserRole;
 
+  @ApiPropertyOptional({
+    description: 'Required when role is VENDOR_STAFF: the restaurant this account works for.',
+    example: 'cl9restaurant0000id',
+  })
+  @IsOptional()
+  @IsString()
+  staffRestaurantId?: string;
+
   @ApiPropertyOptional({ example: 'staff@restaurant.pk' })
   @IsOptional()
   @IsEmail()

@@ -96,9 +96,13 @@ export class RegisterDto {
 
   @ApiPropertyOptional({
     description:
-      'Self-service registration is limited to CUSTOMER and RIDER. Staff and ' +
-      'vendor accounts are created by an administrator.',
-    enum: [UserRole.CUSTOMER, UserRole.RIDER],
+      'Self-service registration is limited to CUSTOMER, RIDER and ' +
+      'VENDOR_OWNER. A vendor registering here still needs a restaurant ' +
+      'approved by a super admin (POST /restaurant-management, then ' +
+      'POST /restaurant-management/:id/approve) before it goes live. ' +
+      'VENDOR_STAFF accounts are created by the vendor owner, not through ' +
+      'registration.',
+    enum: [UserRole.CUSTOMER, UserRole.RIDER, UserRole.VENDOR_OWNER],
     default: UserRole.CUSTOMER,
   })
   @IsOptional()

@@ -30,6 +30,7 @@ const RIDER: AuthenticatedUser = {
   phone: '+923005551234',
   role: UserRole.RIDER,
   permissions: [],
+  staffRestaurantId: null,
   sessionId: 'session-1',
 };
 

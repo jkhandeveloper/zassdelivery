@@ -74,6 +74,7 @@ export class SocketAuthenticator {
       phone: payload.phone,
       role: payload.role,
       permissions: payload.permissions,
+      staffRestaurantId: payload.staffRestaurantId ?? null,
       sessionId: payload.sid,
     };
   }

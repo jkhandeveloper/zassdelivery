@@ -22,6 +22,8 @@ export interface CreateUserInput {
   email?: string | null;
   passwordHash?: string | null;
   status?: UserStatus;
+  /** VENDOR_STAFF only: the restaurant this account works for. */
+  staffRestaurantId?: string | null;
 }
 
 export interface UpdateUserInput {
@@ -46,4 +48,6 @@ export abstract class UserRepository {
   abstract softDelete(id: string): Promise<void>;
   abstract restore(id: string): Promise<User>;
   abstract countByRole(): Promise<Record<string, number>>;
+  /** VENDOR_STAFF accounts registered against one restaurant. */
+  abstract findStaffByRestaurant(restaurantId: string): Promise<User[]>;
 }

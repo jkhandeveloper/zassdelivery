@@ -367,7 +367,10 @@ export class DeleteRestaurantUseCase {
  * Throws 404 rather than 403 for a restaurant belonging to someone else —
  * confirming that an id exists is itself a disclosure.
  */
-export function assertCanManage(restaurant: { ownerId: string }, actor: AuthenticatedUser): void {
+export function assertCanManage(
+  restaurant: { id: string; ownerId: string },
+  actor: AuthenticatedUser,
+): void {
   // Staff is decided by moderation capabilities, never by `restaurants.update`.
   // Vendor owners legitimately hold that permission for their *own* listings,
   // so treating it as a staff marker would let any vendor edit any other
@@ -382,7 +385,16 @@ export function assertCanManage(restaurant: { ownerId: string }, actor: Authenti
     return;
   }
 
-  if (actor.role !== UserRole.VENDOR_OWNER && actor.role !== UserRole.VENDOR_STAFF) {
+  if (actor.role === UserRole.VENDOR_STAFF) {
+    // 404 rather than 403 for another vendor's restaurant: confirming that an
+    // id exists is itself a disclosure.
+    if (actor.staffRestaurantId !== restaurant.id) {
+      throw new ResourceNotFoundException('Restaurant');
+    }
+    return;
+  }
+
+  if (actor.role !== UserRole.VENDOR_OWNER) {
     throw new ForbiddenOperationException('Only a vendor may manage a restaurant.');
   }
 

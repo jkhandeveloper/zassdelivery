@@ -60,10 +60,17 @@ export class PrismaRealtimeAccessRepository extends RealtimeAccessRepository {
       return true;
     }
 
-    // Kitchen staff do not own the listing but do work the tickets. Without
-    // this they would be authenticated and then shown an empty board.
+    // Kitchen staff do not own the listing but do work the tickets. Scoped to
+    // the one restaurant they were registered against — without that check
+    // any vendor's staff account could subscribe to any other restaurant's
+    // board.
     const staff = await this.prisma.user.findFirst({
-      where: { id: userId, role: UserRole.VENDOR_STAFF, deletedAt: null },
+      where: {
+        id: userId,
+        role: UserRole.VENDOR_STAFF,
+        staffRestaurantId: restaurantId,
+        deletedAt: null,
+      },
       select: { id: true },
     });
 

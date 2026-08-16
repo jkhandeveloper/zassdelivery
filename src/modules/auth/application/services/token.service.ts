@@ -58,6 +58,7 @@ export class TokenService {
       phone: user.phone,
       role: user.role,
       permissions: user.permissions,
+      staffRestaurantId: user.staffRestaurantId,
       sid,
     };
 

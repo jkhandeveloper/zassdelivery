@@ -20,6 +20,7 @@ const CUSTOMER: AuthenticatedUser = {
   phone: '+923001234567',
   role: UserRole.CUSTOMER,
   permissions: [],
+  staffRestaurantId: null,
   sessionId: 'session-1',
 };
 

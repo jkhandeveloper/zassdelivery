@@ -40,6 +40,14 @@ import {
   UpdateRestaurantDto,
 } from './application/dto/restaurant.dto';
 import {
+  RegisterRestaurantStaffDto,
+  RestaurantStaffDto,
+} from './application/dto/restaurant-staff.dto';
+import {
+  ListRestaurantStaffUseCase,
+  RegisterRestaurantStaffUseCase,
+} from './application/use-cases/staff.use-cases';
+import {
   ApproveRestaurantUseCase,
   ChangeRestaurantStatusUseCase,
   RejectRestaurantUseCase,
@@ -88,6 +96,8 @@ export class RestaurantManagementController {
     private readonly addImage: AddRestaurantImageUseCase,
     private readonly deleteImage: DeleteRestaurantImageUseCase,
     private readonly reorderImages: ReorderRestaurantImagesUseCase,
+    private readonly registerStaff: RegisterRestaurantStaffUseCase,
+    private readonly listStaff: ListRestaurantStaffUseCase,
   ) {}
 
   // ── Registration and CRUD ──────────────────────────────────
@@ -332,5 +342,38 @@ export class RestaurantManagementController {
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<MessageResponseDto> {
     return this.deleteImage.execute(id, imageId, actor);
+  }
+
+  // ── Staff ──────────────────────────────────────────────────
+
+  @Post(':id/staff')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiParam({ name: 'id' })
+  @ApiOperation({
+    summary: 'Register a staff account for this restaurant',
+    description:
+      'Owner action. Creates a VENDOR_STAFF account that can manage only this ' +
+      'restaurant — the kitchen order queue, menu and profile — never any ' +
+      "other vendor's listing.",
+  })
+  @ApiResponse({ status: 201, type: RestaurantStaffDto })
+  @ApiResponse({ status: 409, description: 'Phone or email already registered.' })
+  addStaff(
+    @Param('id') id: string,
+    @Body() dto: RegisterRestaurantStaffDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<RestaurantStaffDto> {
+    return this.registerStaff.execute(id, dto, actor);
+  }
+
+  @Get(':id/staff')
+  @ApiParam({ name: 'id' })
+  @ApiOperation({ summary: "List this restaurant's staff accounts" })
+  @ApiResponse({ status: 200, type: [RestaurantStaffDto] })
+  staff(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<RestaurantStaffDto[]> {
+    return this.listStaff.execute(id, actor);
   }
 }
