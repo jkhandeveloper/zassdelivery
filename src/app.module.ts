@@ -8,6 +8,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { CartsModule } from './modules/carts/carts.module';
+import { GeographyModule } from './modules/geography/geography.module';
 import { MenusModule } from './modules/menus/menus.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrdersModule } from './modules/orders/orders.module';
@@ -53,6 +54,7 @@ import { SharedModule } from './shared/shared.module';
     // Features
     AuthModule,
     UsersModule,
+    GeographyModule,
     RestaurantsModule,
     MenusModule,
     SearchModule,
