@@ -3,6 +3,7 @@ import {
   AddressLabel,
   AssignmentStatus,
   BannerPlacement,
+  BusinessType,
   CouponType,
   DayOfWeek,
   DriverAvailability,
@@ -388,6 +389,24 @@ const USERS: UserSeed[] = [
     email: 'owner@peshawarbbq.pk',
     role: UserRole.VENDOR_OWNER,
   },
+  {
+    phone: '+923005551237',
+    fullName: 'Nowshera Bakers Owner',
+    email: 'owner@nowsherabakers.pk',
+    role: UserRole.VENDOR_OWNER,
+  },
+  {
+    phone: '+923005551238',
+    fullName: 'Cafe Zamana Owner',
+    email: 'owner@cafezamana.pk',
+    role: UserRole.VENDOR_OWNER,
+  },
+  {
+    phone: '+923005551239',
+    fullName: 'Campus Cafeteria Owner',
+    email: 'owner@campuscafeteria.pk',
+    role: UserRole.VENDOR_OWNER,
+  },
   { phone: '+923005551236', fullName: 'Kitchen Staff', role: UserRole.VENDOR_STAFF },
 ];
 
@@ -587,6 +606,9 @@ const RESTAURANT_CATEGORIES = [
   { name: 'Pizza', nameUr: 'پیزا', slug: 'pizza', sortOrder: 4 },
   { name: 'Karahi', nameUr: 'کڑاہی', slug: 'karahi', sortOrder: 5 },
   { name: 'Beverages', nameUr: 'مشروبات', slug: 'beverages', sortOrder: 6 },
+  { name: 'Desserts', nameUr: 'میٹھا', slug: 'desserts', sortOrder: 7 },
+  { name: 'Chai & Coffee', nameUr: 'چائے اور کافی', slug: 'chai-coffee', sortOrder: 8 },
+  { name: 'Continental', nameUr: 'کانٹینینٹل', slug: 'continental', sortOrder: 9 },
 ];
 
 interface ItemSeed {
@@ -616,6 +638,7 @@ interface RestaurantSeed {
   latitude: number;
   longitude: number;
   categories: string[];
+  businessType: BusinessType;
   priceRange: PriceRange;
   menuCategories: { name: string; nameUr: string; items: ItemSeed[] }[];
 }
@@ -632,6 +655,7 @@ const RESTAURANTS: RestaurantSeed[] = [
     latitude: 34.0088,
     longitude: 71.7881,
     categories: ['desi', 'bbq'],
+    businessType: BusinessType.RESTAURANT,
     priceRange: PriceRange.BUDGET,
     menuCategories: [
       {
@@ -715,6 +739,7 @@ const RESTAURANTS: RestaurantSeed[] = [
     latitude: 33.9962,
     longitude: 71.4412,
     categories: ['bbq', 'desi', 'karahi'],
+    businessType: BusinessType.RESTAURANT,
     priceRange: PriceRange.MODERATE,
     menuCategories: [
       {
@@ -764,6 +789,7 @@ const RESTAURANTS: RestaurantSeed[] = [
     latitude: 34.0158,
     longitude: 71.9762,
     categories: ['fast-food', 'pizza'],
+    businessType: BusinessType.FAST_FOOD,
     priceRange: PriceRange.MODERATE,
     menuCategories: [
       {
@@ -809,6 +835,135 @@ const RESTAURANTS: RestaurantSeed[] = [
       },
     ],
   },
+  {
+    ownerPhone: '+923005551237',
+    name: 'Nowshera Bakers',
+    slug: 'nowshera-bakers',
+    description: 'Fresh bread every morning, cakes to order and a mithai counter.',
+    phone: '+923005551237',
+    zoneSlug: 'nowshera-kalan',
+    addressLine: 'Kalan Bazaar, Nowshera',
+    latitude: 34.0151,
+    longitude: 71.9741,
+    categories: ['desserts'],
+    businessType: BusinessType.BAKERY,
+    priceRange: PriceRange.BUDGET,
+    menuCategories: [
+      {
+        name: 'Bakery',
+        nameUr: 'بیکری',
+        items: [
+          {
+            name: 'Milk Bread',
+            description: 'Soft white loaf, baked each morning.',
+            basePrice: 180,
+            isVegetarian: true,
+          },
+          {
+            name: 'Chocolate Cake (1 lb)',
+            description: 'Whipped chocolate sponge. Order a day ahead for writing on top.',
+            basePrice: 1200,
+            isVegetarian: true,
+            variants: [
+              { name: '1 lb', price: 1200, isDefault: true },
+              { name: '2 lb', price: 2200 },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'Mithai',
+        nameUr: 'مٹھائی',
+        items: [
+          {
+            name: 'Gulab Jamun (1 kg)',
+            description: 'Warm, syrup-soaked and sold by weight.',
+            basePrice: 900,
+            isVegetarian: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    ownerPhone: '+923005551238',
+    name: 'Cafe Zamana',
+    slug: 'cafe-zamana',
+    description: 'Chai, coffee and all-day breakfast off University Road.',
+    phone: '+923005551238',
+    zoneSlug: 'university-town',
+    addressLine: 'University Road, Peshawar',
+    latitude: 34.0012,
+    longitude: 71.4899,
+    categories: ['chai-coffee', 'continental'],
+    businessType: BusinessType.CAFE,
+    priceRange: PriceRange.MODERATE,
+    menuCategories: [
+      {
+        name: 'Hot drinks',
+        nameUr: 'گرم مشروبات',
+        items: [
+          {
+            name: 'Doodh Patti',
+            description: 'Strong tea boiled in milk.',
+            basePrice: 120,
+            isVegetarian: true,
+          },
+          {
+            name: 'Cappuccino',
+            description: 'Double shot, steamed milk.',
+            basePrice: 450,
+            isVegetarian: true,
+          },
+        ],
+      },
+      {
+        name: 'All-day breakfast',
+        nameUr: 'ناشتہ',
+        items: [
+          {
+            name: 'Halwa Puri',
+            description: 'Two puris, chana and suji halwa.',
+            basePrice: 350,
+            isVegetarian: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    ownerPhone: '+923005551239',
+    name: 'Campus Cafeteria',
+    slug: 'campus-cafeteria-risalpur',
+    description: 'The student canteen — plated meals at canteen prices, all day.',
+    phone: '+923005551239',
+    zoneSlug: 'risalpur',
+    addressLine: 'Risalpur Cantt',
+    latitude: 34.0672,
+    longitude: 71.9921,
+    categories: ['desi', 'continental'],
+    businessType: BusinessType.CAFETERIA,
+    priceRange: PriceRange.BUDGET,
+    menuCategories: [
+      {
+        name: "Today's plates",
+        nameUr: 'آج کا کھانا',
+        items: [
+          {
+            name: 'Chicken Pulao Plate',
+            description: 'Pulao, salad and raita.',
+            basePrice: 220,
+          },
+          {
+            name: 'Daal Chawal',
+            description: 'Daal, rice and a side of achar.',
+            basePrice: 150,
+            isVegetarian: true,
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 async function seedRestaurants(): Promise<void> {
@@ -827,7 +982,12 @@ async function seedRestaurants(): Promise<void> {
 
     const restaurant = await prisma.restaurant.upsert({
       where: { slug: seed.slug },
-      update: { name: seed.name, status: RestaurantStatus.ACTIVE, isAcceptingOrders: true },
+      update: {
+        name: seed.name,
+        status: RestaurantStatus.ACTIVE,
+        isAcceptingOrders: true,
+        businessType: seed.businessType,
+      },
       create: {
         ownerId: owner.id,
         name: seed.name,
@@ -840,6 +1000,7 @@ async function seedRestaurants(): Promise<void> {
         latitude: seed.latitude,
         longitude: seed.longitude,
         status: RestaurantStatus.ACTIVE,
+        businessType: seed.businessType,
         priceRange: seed.priceRange,
         minOrderAmount: 250,
         avgPreparationMinutes: 25,

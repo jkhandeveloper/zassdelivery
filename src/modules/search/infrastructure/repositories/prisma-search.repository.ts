@@ -43,6 +43,7 @@ interface RestaurantRow {
   description: string | null;
   rating: string;
   rating_count: number;
+  business_type: string;
   price_range: string;
   min_order_amount: string;
   avg_preparation_minutes: number;
@@ -109,6 +110,10 @@ export class PrismaSearchRepository extends SearchRepository {
       conditions.push(Prisma.sql`r.zone_id = ${filter.zoneId}`);
     }
 
+    if (filter.businessType) {
+      conditions.push(Prisma.sql`r.business_type = ${filter.businessType}::business_type`);
+    }
+
     if (filter.priceRange) {
       conditions.push(Prisma.sql`r.price_range = ${filter.priceRange}::price_range`);
     }
@@ -153,7 +158,8 @@ export class PrismaSearchRepository extends SearchRepository {
     const rows = await this.prisma.$queryRaw<RestaurantRow[]>`
       SELECT
         r.id, r.name, r.slug, r.logo_url, r.cover_url, r.description,
-        r.rating, r.rating_count, r.price_range::text AS price_range,
+        r.rating, r.rating_count, r.business_type::text AS business_type,
+        r.price_range::text AS price_range,
         r.min_order_amount, r.avg_preparation_minutes, r.is_accepting_orders,
         c.name AS city_name,
         z.name AS zone_name,
@@ -494,6 +500,7 @@ function toRestaurantHit(row: RestaurantRow): RestaurantSearchHit {
     description: row.description,
     rating: Number(row.rating),
     ratingCount: row.rating_count,
+    businessType: row.business_type as RestaurantSearchHit['businessType'],
     priceRange: row.price_range as RestaurantSearchHit['priceRange'],
     minOrderAmount: Number(row.min_order_amount),
     avgPreparationMinutes: row.avg_preparation_minutes,

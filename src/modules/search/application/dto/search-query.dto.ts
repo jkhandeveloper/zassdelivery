@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PriceRange } from '@prisma/client';
+import { BusinessType, PriceRange } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -106,6 +106,14 @@ export class SearchRestaurantsDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   category?: string;
+
+  @ApiPropertyOptional({
+    enum: BusinessType,
+    description: 'Filter by the kind of business, independent of the cuisine.',
+  })
+  @IsOptional()
+  @IsEnum(BusinessType)
+  businessType?: BusinessType;
 
   @ApiPropertyOptional({ enum: PriceRange })
   @IsOptional()

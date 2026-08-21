@@ -1,4 +1,5 @@
 import type {
+  BusinessType,
   DayOfWeek,
   PriceRange,
   Prisma,
@@ -27,6 +28,7 @@ export interface ListRestaurantsFilter {
   cityId?: string;
   zoneId?: string;
   categorySlug?: string;
+  businessType?: BusinessType;
   priceRange?: PriceRange;
   status?: RestaurantStatus;
   minRating?: number;
@@ -55,6 +57,7 @@ export interface CreateRestaurantInput {
   landmark?: string | null;
   latitude: number;
   longitude: number;
+  businessType?: BusinessType;
   priceRange?: PriceRange;
   minOrderAmount?: number;
   avgPreparationMinutes?: number;

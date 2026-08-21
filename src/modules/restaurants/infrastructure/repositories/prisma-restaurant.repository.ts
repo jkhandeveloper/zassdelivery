@@ -277,6 +277,10 @@ export class PrismaRestaurantRepository extends RestaurantRepository {
       where.ownerId = filter.ownerId;
     }
 
+    if (filter.businessType !== undefined) {
+      where.businessType = filter.businessType;
+    }
+
     if (filter.priceRange !== undefined) {
       where.priceRange = filter.priceRange;
     }

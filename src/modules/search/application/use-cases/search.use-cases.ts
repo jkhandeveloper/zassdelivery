@@ -45,6 +45,7 @@ export class SearchRestaurantsUseCase {
         cityId: dto.cityId,
         zoneId: dto.zoneId,
         categorySlug: dto.category,
+        businessType: dto.businessType,
         priceRange: dto.priceRange,
         minRating: dto.minRating,
         openNowOnly: dto.openNow,

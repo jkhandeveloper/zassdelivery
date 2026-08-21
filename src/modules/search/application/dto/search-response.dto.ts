@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PriceRange } from '@prisma/client';
+import { BusinessType, PriceRange } from '@prisma/client';
 
 export class RestaurantHitDto {
   @ApiProperty() id!: string;
@@ -10,6 +10,7 @@ export class RestaurantHitDto {
   @ApiPropertyOptional({ nullable: true }) description!: string | null;
   @ApiProperty({ example: 4.5 }) rating!: number;
   @ApiProperty({ example: 128 }) ratingCount!: number;
+  @ApiProperty({ enum: BusinessType }) businessType!: BusinessType;
   @ApiProperty({ enum: PriceRange }) priceRange!: PriceRange;
   @ApiProperty({ example: 250 }) minOrderAmount!: number;
   @ApiProperty({ example: 25 }) avgPreparationMinutes!: number;

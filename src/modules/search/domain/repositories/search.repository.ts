@@ -1,4 +1,4 @@
-import type { PriceRange } from '@prisma/client';
+import type { BusinessType, PriceRange } from '@prisma/client';
 
 import type { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
 
@@ -12,6 +12,7 @@ export interface RestaurantSearchFilter {
   cityId?: string;
   zoneId?: string;
   categorySlug?: string;
+  businessType?: BusinessType;
   priceRange?: PriceRange;
   minRating?: number;
   near?: GeoPoint;
@@ -32,6 +33,7 @@ export interface RestaurantSearchHit {
   description: string | null;
   rating: number;
   ratingCount: number;
+  businessType: BusinessType;
   priceRange: PriceRange;
   minOrderAmount: number;
   avgPreparationMinutes: number;

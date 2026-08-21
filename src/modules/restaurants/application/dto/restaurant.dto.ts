@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType, OmitType } from '@nestjs/swagger';
-import { DayOfWeek, PriceRange, RestaurantStatus } from '@prisma/client';
+import { BusinessType, DayOfWeek, PriceRange, RestaurantStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -107,6 +107,18 @@ export class RegisterRestaurantDto {
   @ArrayUnique()
   @IsString({ each: true })
   categoryIds!: string[];
+
+  @ApiPropertyOptional({
+    enum: BusinessType,
+    default: BusinessType.RESTAURANT,
+    description:
+      'What sort of place this is — a restaurant, bakery, cafeteria and so on. ' +
+      'Separate from the cuisine categories above: this is the kind of business, ' +
+      'those are what it cooks.',
+  })
+  @IsOptional()
+  @IsEnum(BusinessType)
+  businessType?: BusinessType;
 
   @ApiPropertyOptional({ enum: PriceRange, default: PriceRange.MODERATE })
   @IsOptional()

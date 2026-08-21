@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  BusinessType,
   DayOfWeek,
   PriceRange,
   RestaurantStatus,
@@ -97,6 +98,12 @@ export class RestaurantDto {
 
   @ApiProperty({ enum: RestaurantStatus })
   status!: RestaurantStatus;
+
+  @ApiProperty({
+    enum: BusinessType,
+    description: 'The kind of establishment. The cuisines it cooks are in `categories`.',
+  })
+  businessType!: BusinessType;
 
   @ApiProperty({ enum: PriceRange })
   priceRange!: PriceRange;
@@ -234,6 +241,7 @@ export function toRestaurantDto(
     zone: restaurant.zone,
     categories: restaurant.categories.map((link) => link.category),
     status: restaurant.status,
+    businessType: restaurant.businessType,
     priceRange: restaurant.priceRange,
     isAcceptingOrders: restaurant.isAcceptingOrders,
     isFeatured: restaurant.isFeatured,

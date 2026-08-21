@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { UserStatus } from '@prisma/client';
 import type { User } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
@@ -63,6 +64,14 @@ export class RestaurantStaffDto {
   @ApiPropertyOptional({ nullable: true })
   email!: string | null;
 
+  @ApiProperty({
+    enum: UserStatus,
+    description:
+      'Account state. A suspended member of staff keeps their row here but ' +
+      'cannot sign in, so the owner can see why the kitchen is short-handed.',
+  })
+  status!: UserStatus;
+
   @ApiProperty()
   createdAt!: Date;
 }
@@ -73,6 +82,7 @@ export function toRestaurantStaffDto(user: User): RestaurantStaffDto {
     phone: user.phone,
     fullName: user.fullName,
     email: user.email,
+    status: user.status,
     createdAt: user.createdAt,
   };
 }

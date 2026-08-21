@@ -80,6 +80,37 @@ enum RestaurantStatus {
   @@map("restaurant_status")
 }
 
+/// What kind of business is behind a listing.
+///
+/// Deliberately separate from RestaurantCategory, which is the *cuisine*: a
+/// bakery and a dhaba can both be filed under "Desi", and someone after a
+/// birthday cake wants the first while someone after karahi wants the second.
+/// One answers "what sort of place is this", the other "what do they cook".
+enum BusinessType {
+  RESTAURANT
+  CAFE
+  BAKERY
+  /// Canteen serving a campus, hospital or office.
+  CAFETERIA
+  FAST_FOOD
+  /// Roadside eatery.
+  DHABA
+  /// Mithai and traditional confectionery.
+  SWEET_SHOP
+  /// Juice, shake and chai counters.
+  JUICE_CORNER
+  /// Ice cream and dessert parlours.
+  DESSERT_PARLOUR
+  /// A home cook trading from a domestic kitchen.
+  HOME_KITCHEN
+  /// Delivery-only, with no dining room to walk into.
+  CLOUD_KITCHEN
+  /// Kiryana stores, marts and general provisions.
+  GROCERY
+
+  @@map("business_type")
+}
+
 enum PriceRange {
   BUDGET
   MODERATE
@@ -789,6 +820,9 @@ model Restaurant {
   latitude    Float
   longitude   Float
 
+  /// What sort of place this is — a restaurant, a bakery, a cafeteria. Defaults
+  /// to RESTAURANT so every listing that predates the column keeps its meaning.
+  businessType      BusinessType     @default(RESTAURANT) @map("business_type")
   status            RestaurantStatus @default(PENDING_APPROVAL)
   /// Owner's manual on/off switch, independent of opening hours.
   isAcceptingOrders Boolean          @default(true) @map("is_accepting_orders")
@@ -844,6 +878,7 @@ model Restaurant {
   @@index([cityId, status])
   @@index([zoneId, status])
   @@index([status, isFeatured])
+  @@index([businessType, status])
   @@index([ownerId])
   @@index([rating])
   @@index([deletedAt])
