@@ -25,6 +25,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
@@ -155,6 +156,7 @@ export class RegisterRiderDto {
   zoneId?: string;
 
   @ApiProperty({ type: RiderVehicleDto })
+  @ValidateNested()
   @Type(() => RiderVehicleDto)
   vehicle!: RiderVehicleDto;
 
@@ -163,6 +165,7 @@ export class RegisterRiderDto {
     description: 'Can be supplied later, but withdrawals are blocked until it is.',
   })
   @IsOptional()
+  @ValidateNested()
   @Type(() => PayoutDetailsDto)
   payout?: PayoutDetailsDto;
 }
@@ -182,6 +185,7 @@ export class UpdateRiderDto {
 
   @ApiPropertyOptional({ type: PayoutDetailsDto })
   @IsOptional()
+  @ValidateNested()
   @Type(() => PayoutDetailsDto)
   payout?: PayoutDetailsDto;
 }
