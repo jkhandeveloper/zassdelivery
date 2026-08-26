@@ -19,7 +19,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   Max,
   MaxLength,
@@ -29,6 +28,7 @@ import {
 } from 'class-validator';
 
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
+import { IsAbsoluteUrl } from '@/common/validators/is-absolute-url.decorator';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -202,7 +202,7 @@ export class UploadDocumentDto {
     description: 'Location of the uploaded file. Re-uploading replaces the previous one.',
     maxLength: 500,
   })
-  @IsUrl({ require_protocol: true }, { message: 'fileUrl must be an absolute URL' })
+  @IsAbsoluteUrl({ message: 'fileUrl must be an absolute URL' })
   @MaxLength(500)
   fileUrl!: string;
 

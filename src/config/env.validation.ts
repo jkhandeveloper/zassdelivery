@@ -236,6 +236,48 @@ export class EnvironmentVariables {
   @Max(50)
   PUSH_MAX_FAILURES: number = 5;
 
+  // ── Object storage (MinIO / S3) ──
+  // Credentials are absent on a machine without MinIO running, so the pair is
+  // optional: uploads report the store as unconfigured rather than crashing the
+  // boot, and every other route keeps working.
+  @IsString()
+  @IsNotEmpty()
+  MINIO_ENDPOINT: string = 'localhost';
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  MINIO_PORT: number = 9000;
+
+  @Transform(toBoolean)
+  @IsBoolean()
+  MINIO_USE_SSL: boolean = false;
+
+  @IsOptional()
+  @IsString()
+  MINIO_ACCESS_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  MINIO_SECRET_KEY?: string;
+
+  @IsString()
+  @Matches(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/, {
+    message: 'MINIO_BUCKET must be a valid S3 bucket name (lower-case, 3-63 chars)',
+  })
+  MINIO_BUCKET: string = 'zassdelivery';
+
+  @IsString()
+  @IsNotEmpty()
+  MINIO_REGION: string = 'us-east-1';
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  UPLOAD_MAX_FILE_SIZE_MB: number = 10;
+
   // ── Market defaults ──
   @IsString()
   @Matches(/^\+\d{1,4}$/, { message: 'DEFAULT_COUNTRY_CODE must look like "+92"' })

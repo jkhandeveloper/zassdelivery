@@ -17,6 +17,7 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { RestaurantsModule } from './modules/restaurants/restaurants.module';
 import { RidersModule } from './modules/riders/riders.module';
 import { SearchModule } from './modules/search/search.module';
+import { StorageModule } from './modules/storage/storage.module';
 import { UsersModule } from './modules/users/users.module';
 import { SharedModule } from './shared/shared.module';
 
@@ -58,6 +59,7 @@ import { SharedModule } from './shared/shared.module';
     RestaurantsModule,
     MenusModule,
     SearchModule,
+    StorageModule,
     CartsModule,
     OrdersModule,
     RidersModule,

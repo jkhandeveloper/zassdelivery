@@ -5,6 +5,7 @@ import { loggerConfig } from './logger.config';
 import { notificationsConfig } from './notifications.config';
 import { paymentsConfig } from './payments.config';
 import { redisConfig } from './redis.config';
+import { storageConfig } from './storage.config';
 import { swaggerConfig } from './swagger.config';
 import { throttleConfig } from './throttle.config';
 
@@ -16,6 +17,7 @@ export * from './logger.config';
 export * from './notifications.config';
 export * from './payments.config';
 export * from './redis.config';
+export * from './storage.config';
 export * from './swagger.config';
 export * from './throttle.config';
 
@@ -30,4 +32,5 @@ export const configurations = [
   swaggerConfig,
   paymentsConfig,
   notificationsConfig,
+  storageConfig,
 ];

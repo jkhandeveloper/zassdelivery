@@ -48,6 +48,29 @@ services:
     networks:
       - zass_network
 
+  minio:
+    image: minio/minio:latest
+    container_name: zass_minio
+    restart: unless-stopped
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-zassdelivery}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-zass_dev_secret}
+    ports:
+      # 9000 is the S3 API the app talks to; 9001 is the browser console.
+      - '${MINIO_PORT_HOST:-9000}:9000'
+      - '${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - zass_network
+
   api:
     build:
       context: .
@@ -64,6 +87,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-zass}:${POSTGRES_PASSWORD:-zass_dev_password}@postgres:5432/${POSTGRES_DB:-zassdelivery}?schema=public&connection_limit=20&pool_timeout=15
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
       RUN_MIGRATIONS_ON_BOOT: 'true'
     ports:
       - '${PORT:-3000}:3000'
@@ -72,6 +97,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     networks:
       - zass_network
 
@@ -79,6 +106,8 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  minio_data:
     driver: local
 
 networks:
