@@ -118,11 +118,28 @@ export class OrderAccessService {
 
 @Injectable()
 export class ListOrdersUseCase {
-  constructor(private readonly orders: OrderRepository) {}
+  constructor(
+    private readonly orders: OrderRepository,
+    private readonly settings: DeliveryPricingRepository,
+  ) {}
 
+  /**
+   * A page of orders, each carrying the moves this caller may make on it.
+   *
+   * `as` is the role the caller holds over every row in the list, which the
+   * scope already fixes: a restaurant's queue is all RESTAURANT, a rider's runs
+   * are all DRIVER. Without it every row comes back with an empty
+   * `allowedTransitions` and a board renders no buttons at all — the detail
+   * endpoint would be the only place an order could be moved from.
+   */
   async execute(
     query: ListOrdersAdminQueryDto,
-    scope: { customerId?: string; restaurantId?: string; driverId?: string } = {},
+    scope: {
+      customerId?: string;
+      restaurantId?: string;
+      driverId?: string;
+      as?: ActorType;
+    } = {},
   ): Promise<PaginatedResult<OrderDto>> {
     const orderBy = buildOrderBy(query.sortBy, query.sortOrder, ORDER_SORT_FIELDS, 'createdAt');
 
@@ -143,8 +160,31 @@ export class ListOrdersUseCase {
       search: query.search,
     });
 
+    const as = scope.as;
+
+    if (as === undefined) {
+      return { items: result.items.map((order) => toOrderDto(order)), meta: result.meta };
+    }
+
+    // Read once for the whole page rather than per row: it is one setting, and
+    // a list of fifty orders would otherwise be fifty identical lookups.
+    const windowMinutes =
+      as === ActorType.CUSTOMER ? await this.settings.numericSetting(SETTING_CANCEL_WINDOW, 5) : 0;
+
     return {
-      items: result.items.map((order) => toOrderDto(order)),
+      items: result.items.map((order) => {
+        const allowed = OrderStateMachine.allowedFrom(order.status)
+          .filter((rule) => rule.actors.includes(as))
+          .map((rule) => rule.to);
+
+        const canCancel =
+          as === ActorType.CUSTOMER
+            ? OrderStateMachine.customerMayCancel(order.status, order.placedAt, windowMinutes)
+                .allowed
+            : allowed.includes(OrderStatus.CANCELLED);
+
+        return toOrderDto(order, { allowedTransitions: allowed, canCancel });
+      }),
       meta: result.meta,
     };
   }

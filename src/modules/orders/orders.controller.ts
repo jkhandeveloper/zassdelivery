@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { OrderStatus } from '@prisma/client';
+import { ActorType, OrderStatus } from '@prisma/client';
 
 import { ApiPaginatedResponse } from '@/common/decorators/api-paginated-response.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
@@ -76,7 +76,7 @@ export class OrdersController {
     @CurrentUser('id') userId: string,
     @Query() query: ListOrdersQueryDto,
   ): Promise<PaginatedResult<OrderDto>> {
-    return this.listOrders.execute(query, { customerId: userId });
+    return this.listOrders.execute(query, { customerId: userId, as: ActorType.CUSTOMER });
   }
 
   @Get(':id')

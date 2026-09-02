@@ -82,6 +82,14 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, TransitionRule[]> = {
       actors: [ActorType.DRIVER, ActorType.ADMIN],
       label: 'Collected by rider',
     },
+    // Not every order sees a rider: a vendor who delivers themselves, or hands
+    // the bag over the counter, would otherwise leave the ticket sitting at
+    // READY_FOR_PICKUP forever with nobody entitled to close it.
+    {
+      to: OrderStatus.DELIVERED,
+      actors: [ActorType.RESTAURANT, ActorType.ADMIN],
+      label: 'Delivered',
+    },
     { to: OrderStatus.CANCELLED, actors: [ActorType.ADMIN], label: 'Cancelled' },
   ],
 
@@ -99,7 +107,13 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, TransitionRule[]> = {
   ],
 
   [OrderStatus.ON_THE_WAY]: [
-    { to: OrderStatus.DELIVERED, actors: [ActorType.DRIVER, ActorType.ADMIN], label: 'Delivered' },
+    {
+      to: OrderStatus.DELIVERED,
+      // The rider closes their own run against the customer's code; the kitchen
+      // and support can close one that the rider never got round to marking.
+      actors: [ActorType.DRIVER, ActorType.RESTAURANT, ActorType.ADMIN],
+      label: 'Delivered',
+    },
     {
       to: OrderStatus.FAILED,
       actors: [ActorType.DRIVER, ActorType.ADMIN, ActorType.SYSTEM],

@@ -12,7 +12,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   Max,
   MaxLength,
@@ -21,6 +20,8 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
+
+import { IsAbsoluteUrl } from '@/common/validators/is-absolute-url.decorator';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -99,7 +100,7 @@ export class CreateMenuCategoryDto {
 
   @ApiPropertyOptional({ example: 'https://cdn.zassdelivery.pk/categories/kababs.jpg' })
   @IsOptional()
-  @IsUrl({ require_protocol: true })
+  @IsAbsoluteUrl()
   @MaxLength(500)
   imageUrl?: string;
 
@@ -161,7 +162,7 @@ export class CreateMenuItemDto {
 
   @ApiPropertyOptional({ example: 'https://cdn.zassdelivery.pk/items/chapli.jpg' })
   @IsOptional()
-  @IsUrl({ require_protocol: true })
+  @IsAbsoluteUrl()
   @MaxLength(500)
   imageUrl?: string;
 
@@ -419,7 +420,7 @@ export class UpdateAddOnDto extends PartialType(CreateAddOnDto) {}
 
 export class AddMenuItemImageDto {
   @ApiProperty({ example: 'https://cdn.zassdelivery.pk/items/chapli-2.jpg' })
-  @IsUrl({ require_protocol: true }, { message: 'url must be a valid absolute URL' })
+  @IsAbsoluteUrl({ message: 'url must be a valid absolute URL' })
   @MaxLength(500)
   url!: string;
 

@@ -7,13 +7,13 @@ import {
   IsIn,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
 
 import { PK_PHONE_E164_REGEX } from '@/common/constants/app.constants';
+import { IsAbsoluteUrl } from '@/common/validators/is-absolute-url.decorator';
 import { normalisePhone } from '@/modules/auth/application/dto/auth.dto';
 
 const trim = ({ value }: { value: unknown }): unknown =>
@@ -38,11 +38,15 @@ export class UpdateProfileDto {
   )
   email?: string;
 
-  @ApiPropertyOptional({ example: 'https://cdn.zassdelivery.pk/avatars/ahmad.jpg' })
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'https://cdn.zassdelivery.pk/avatars/ahmad.jpg',
+    description: 'Send null to remove the photo; omit the field to leave it as it is.',
+  })
   @IsOptional()
-  @IsUrl({ require_protocol: true }, { message: 'avatarUrl must be a valid URL' })
+  @IsAbsoluteUrl({ message: 'avatarUrl must be a valid URL' })
   @MaxLength(500)
-  avatarUrl?: string;
+  avatarUrl?: string | null;
 
   @ApiPropertyOptional({ description: 'UI language.', enum: ['en', 'ur'], example: 'en' })
   @IsOptional()

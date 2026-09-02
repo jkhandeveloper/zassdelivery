@@ -15,7 +15,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   Max,
   MaxLength,
@@ -25,6 +24,7 @@ import {
 } from 'class-validator';
 
 import { PK_PHONE_E164_REGEX } from '@/common/constants/app.constants';
+import { IsAbsoluteUrl } from '@/common/validators/is-absolute-url.decorator';
 import { normalisePhone } from '@/modules/auth/application/dto/auth.dto';
 
 const trim = ({ value }: { value: unknown }): unknown =>
@@ -267,7 +267,7 @@ export class SetBusinessHoursDto {
 
 export class AddRestaurantImageDto {
   @ApiProperty({ example: 'https://cdn.zassdelivery.pk/chapli-kabab-house/interior.jpg' })
-  @IsUrl({ require_protocol: true }, { message: 'url must be a valid absolute URL' })
+  @IsAbsoluteUrl({ message: 'url must be a valid absolute URL' })
   @MaxLength(500)
   url!: string;
 
@@ -322,7 +322,7 @@ export class CreateRestaurantCategoryDto {
 
   @ApiPropertyOptional({ example: 'https://cdn.zassdelivery.pk/categories/bbq.svg' })
   @IsOptional()
-  @IsUrl({ require_protocol: true })
+  @IsAbsoluteUrl()
   @MaxLength(500)
   iconUrl?: string;
 

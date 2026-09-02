@@ -10,7 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { OrderStatus } from '@prisma/client';
+import { ActorType, OrderStatus, UserRole } from '@prisma/client';
 
 import { ApiPaginatedResponse } from '@/common/decorators/api-paginated-response.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
@@ -33,6 +33,20 @@ import {
   ListOrdersUseCase,
   RefundOrderUseCase,
 } from './application/use-cases/order-lifecycle.use-cases';
+
+/**
+ * Which party a list is being read as.
+ *
+ * Only used to decide what buttons the response advertises — the actual move is
+ * re-derived per order by `OrderAccessService`, which is what enforces it. Staff
+ * reading a kitchen board should see the transitions they can actually perform,
+ * not the ones the kitchen can.
+ */
+function actorFor(user: AuthenticatedUser, otherwise: ActorType): ActorType {
+  return user.role === UserRole.ADMIN || user.role === UserRole.SUPER_ADMIN
+    ? ActorType.ADMIN
+    : otherwise;
+}
 
 /**
  * Lifecycle operations for restaurants, riders and staff.
@@ -70,8 +84,12 @@ export class OrderManagementController {
   forRestaurant(
     @Param('restaurantId') restaurantId: string,
     @Query() query: ListOrdersAdminQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
   ): Promise<PaginatedResult<OrderDto>> {
-    return this.listOrders.execute(query, { restaurantId });
+    return this.listOrders.execute(query, {
+      restaurantId,
+      as: actorFor(actor, ActorType.RESTAURANT),
+    });
   }
 
   @Get('drivers/:driverId')
@@ -81,8 +99,9 @@ export class OrderManagementController {
   forDriver(
     @Param('driverId') driverId: string,
     @Query() query: ListOrdersAdminQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
   ): Promise<PaginatedResult<OrderDto>> {
-    return this.listOrders.execute(query, { driverId });
+    return this.listOrders.execute(query, { driverId, as: actorFor(actor, ActorType.DRIVER) });
   }
 
   @Get()
@@ -93,7 +112,7 @@ export class OrderManagementController {
   })
   @ApiPaginatedResponse(OrderDto)
   all(@Query() query: ListOrdersAdminQueryDto): Promise<PaginatedResult<OrderDto>> {
-    return this.listOrders.execute(query);
+    return this.listOrders.execute(query, { as: ActorType.ADMIN });
   }
 
   // ── Restaurant actions ─────────────────────────────────────
@@ -173,8 +192,11 @@ export class OrderManagementController {
   @ApiOperation({
     summary: 'Mark delivered',
     description:
-      'ON_THE_WAY → DELIVERED. For cash orders this is also when payment is ' +
-      'settled and the commission entry is confirmed.',
+      'ON_THE_WAY → DELIVERED for the assigned rider, who must confirm with the ' +
+      'customer’s code through the rider app. The restaurant and support may ' +
+      'also close an order out from READY_FOR_PICKUP, which is how a vendor who ' +
+      'delivers themselves finishes one. For cash orders this is also when ' +
+      'payment is settled and the commission entry is confirmed.',
   })
   @ApiResponse({ status: 200, type: OrderDto })
   delivered(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser): Promise<OrderDto> {

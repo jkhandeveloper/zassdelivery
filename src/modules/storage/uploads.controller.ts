@@ -72,6 +72,7 @@ export class UploadsController {
           enum: [
             'rider-documents',
             'restaurant-logos',
+            'restaurant-gallery',
             'menu-items',
             'avatars',
             'support-attachments',

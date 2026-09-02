@@ -8,6 +8,7 @@
 export enum UploadFolder {
   RiderDocuments = 'rider-documents',
   RestaurantLogos = 'restaurant-logos',
+  RestaurantGallery = 'restaurant-gallery',
   MenuItems = 'menu-items',
   Avatars = 'avatars',
   SupportAttachments = 'support-attachments',
