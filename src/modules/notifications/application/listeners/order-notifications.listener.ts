@@ -98,6 +98,21 @@ export class OrderNotificationsListener {
           },
         ];
 
+      // PICKED_UP is left alone on purpose — the riders module already sends the
+      // delivery code at that moment, and two messages a second apart is how a
+      // notification list becomes something people mute. ON_THE_WAY is the one
+      // that earns its place: it is the point at which the map starts moving,
+      // and the customer has no other way to learn that.
+      case OrderStatus.ON_THE_WAY:
+        return [
+          {
+            userId: event.customerId,
+            title: `Your rider is on the way`,
+            body: `Order ${event.orderNumber} has left ${event.restaurantName}. Follow them on the map and have your four-digit code ready.`,
+            push: true,
+          },
+        ];
+
       case OrderStatus.DELIVERED:
         return [
           {

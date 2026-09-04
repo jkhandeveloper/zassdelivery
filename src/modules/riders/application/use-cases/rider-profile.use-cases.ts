@@ -15,7 +15,10 @@ import {
   ResourceNotFoundException,
 } from '@/common/exceptions/domain.exception';
 import type { AuthenticatedUser } from '@/common/interfaces/authenticated-user.interface';
+import { haversineKm } from '@/common/utils/geo.util';
+import { RealtimeService } from '@/modules/realtime/application/realtime.service';
 
+import { AssignmentRepository } from '../../domain/repositories/assignment.repository';
 import { RiderRepository, type RiderWithDetails } from '../../domain/repositories/rider.repository';
 import {
   toDocumentDto,
@@ -308,20 +311,47 @@ export class SetAvailabilityUseCase {
 export class UpdateLocationUseCase {
   constructor(
     private readonly riders: RiderRepository,
+    private readonly assignments: AssignmentRepository,
     private readonly access: RiderAccessService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /**
-   * Records the rider's latest position.
+   * Records the rider's latest position, and puts it on the customer's map.
    *
    * Deliberately a bare write with no response body: this is called every few
    * seconds by a phone on a patchy mobile connection, and anything it returns
    * is bandwidth spent on data nobody reads.
+   *
+   * The broadcast is what makes this endpoint the *whole* tracking path rather
+   * than half of it. The socket has its own `rider:location` command and a
+   * rider app using that gets the same result; but a rider whose app reports
+   * over HTTP — because the socket dropped, or because that is simply what it
+   * was built to do — was previously writing to a column nobody was reading
+   * live, and the customer's map sat frozen on the rider's last socket fix.
+   *
+   * The order is resolved from the rider's own accepted run, never from the
+   * request: a position report is not a claim about which order it belongs to.
    */
   async execute(actor: AuthenticatedUser, dto: UpdateLocationDto): Promise<void> {
     const rider = await this.access.approved(actor);
 
     await this.riders.updateLocation(rider.id, dto.latitude, dto.longitude);
+
+    const active = await this.assignments.findActiveForDriver(rider.id);
+    const order = active?.order ?? null;
+
+    this.realtime.riderMoved({
+      orderId: order?.id ?? null,
+      driverId: rider.id,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      distanceKm:
+        order === null || order.deliveryLat === null || order.deliveryLng === null
+          ? null
+          : haversineKm(dto.latitude, dto.longitude, order.deliveryLat, order.deliveryLng),
+      at: new Date().toISOString(),
+    });
   }
 }
 

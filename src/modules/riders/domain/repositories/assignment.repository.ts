@@ -75,6 +75,15 @@ export abstract class AssignmentRepository {
   ): Promise<AssignmentWithOrder | null>;
 
   /**
+   * The run this rider has actually taken and not yet finished.
+   *
+   * Accepted only, and only while the order is still moving: an offer the rider
+   * has not answered is not something their position should be attributed to,
+   * and a delivered order must stop appearing on the customer's map.
+   */
+  abstract findActiveForDriver(driverId: string): Promise<AssignmentWithOrder | null>;
+
+  /**
    * Creates an offer.
    *
    * Fails loudly when the order already has a live assignment or the rider is

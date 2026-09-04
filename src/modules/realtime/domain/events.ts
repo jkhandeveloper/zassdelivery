@@ -73,6 +73,21 @@ export interface OrderSnapshotPayload extends OrderStatusPayload {
   rider: { id: string; name: string; phone: string } | null;
   /** The rider's last known position, so a reconnecting map is not blank. */
   riderLocation: RiderLocationPayload | null;
+  /**
+   * The two fixed ends of the run.
+   *
+   * A tracking map needs somewhere to be before the rider's first position
+   * arrives — and without the drop-off it cannot show how far away the rider
+   * still is, only where they happen to be. `destination` is null for an order
+   * saved against an address that never resolved to coordinates.
+   */
+  pickup: Coordinates;
+  destination: Coordinates | null;
+}
+
+export interface Coordinates {
+  latitude: number;
+  longitude: number;
 }
 
 export interface RiderLocationPayload {

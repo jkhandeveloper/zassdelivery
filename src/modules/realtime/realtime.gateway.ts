@@ -348,6 +348,11 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       at: snapshot.updatedAt.toISOString(),
       restaurantName: snapshot.restaurantName,
       estimatedDeliveryAt: snapshot.estimatedDeliveryAt?.toISOString() ?? null,
+      pickup: { latitude: snapshot.restaurantLat, longitude: snapshot.restaurantLng },
+      destination:
+        snapshot.deliveryLat === null || snapshot.deliveryLng === null
+          ? null
+          : { latitude: snapshot.deliveryLat, longitude: snapshot.deliveryLng },
       rider: snapshot.rider,
       riderLocation:
         snapshot.riderLocation === null || snapshot.driverId === null

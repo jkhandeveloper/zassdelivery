@@ -8,6 +8,9 @@ export interface OrderSnapshot {
   customerId: string;
   restaurantId: string;
   restaurantName: string;
+  /** Where the rider collects from — the map's pickup pin. */
+  restaurantLat: number;
+  restaurantLng: number;
   driverId: string | null;
   estimatedDeliveryAt: Date | null;
   deliveryLat: number | null;

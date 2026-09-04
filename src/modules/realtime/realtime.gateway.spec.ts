@@ -34,6 +34,8 @@ function snapshot(overrides: Partial<OrderSnapshot> = {}): OrderSnapshot {
     customerId: 'user-1',
     restaurantId: 'restaurant-1',
     restaurantName: 'Chapli Kabab House',
+    restaurantLat: 34.0151,
+    restaurantLng: 71.7938,
     driverId: 'rider-1',
     estimatedDeliveryAt: new Date('2026-08-10T12:30:00.000Z'),
     deliveryLat: 34.0091,

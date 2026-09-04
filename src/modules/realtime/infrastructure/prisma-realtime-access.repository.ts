@@ -114,7 +114,7 @@ export class PrismaRealtimeAccessRepository extends RealtimeAccessRepository {
         deliveryLat: true,
         deliveryLng: true,
         updatedAt: true,
-        restaurant: { select: { name: true } },
+        restaurant: { select: { name: true, latitude: true, longitude: true } },
         driver: {
           select: {
             id: true,
@@ -140,6 +140,8 @@ export class PrismaRealtimeAccessRepository extends RealtimeAccessRepository {
       customerId: order.customerId,
       restaurantId: order.restaurantId,
       restaurantName: order.restaurant.name,
+      restaurantLat: order.restaurant.latitude,
+      restaurantLng: order.restaurant.longitude,
       driverId: order.driverId,
       estimatedDeliveryAt: order.estimatedDeliveryAt,
       deliveryLat: order.deliveryLat,

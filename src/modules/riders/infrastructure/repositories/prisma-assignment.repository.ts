@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AssignmentStatus, DriverAvailability, Prisma, type OrderStatus } from '@prisma/client';
+import { AssignmentStatus, DriverAvailability, OrderStatus, Prisma } from '@prisma/client';
 
 import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
 import type { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
@@ -52,6 +52,21 @@ const DETAILS = { order: ORDER_CONTEXT } satisfies Prisma.DeliveryAssignmentIncl
 /** Assignment states in which an order or a rider is still committed. */
 const LIVE_STATUSES: AssignmentStatus[] = [AssignmentStatus.OFFERED, AssignmentStatus.ACCEPTED];
 
+/**
+ * Order states during which a rider's position is still worth following.
+ *
+ * Starts at CONFIRMED rather than PICKED_UP because dispatch offers a run while
+ * the food is still cooking — the customer watching their order should see the
+ * rider approaching the restaurant, not a blank map until the bag is collected.
+ */
+const TRACKABLE_ORDER_STATUSES: OrderStatus[] = [
+  OrderStatus.CONFIRMED,
+  OrderStatus.PREPARING,
+  OrderStatus.READY_FOR_PICKUP,
+  OrderStatus.PICKED_UP,
+  OrderStatus.ON_THE_WAY,
+];
+
 @Injectable()
 export class PrismaAssignmentRepository extends AssignmentRepository {
   constructor(private readonly prisma: PrismaService) {
@@ -99,6 +114,18 @@ export class PrismaAssignmentRepository extends AssignmentRepository {
   ): Promise<AssignmentWithOrder | null> {
     return this.prisma.deliveryAssignment.findFirst({
       where: { orderId, driverId, status: { in: LIVE_STATUSES } },
+      include: DETAILS,
+      orderBy: { offeredAt: 'desc' },
+    });
+  }
+
+  async findActiveForDriver(driverId: string): Promise<AssignmentWithOrder | null> {
+    return this.prisma.deliveryAssignment.findFirst({
+      where: {
+        driverId,
+        status: AssignmentStatus.ACCEPTED,
+        order: { status: { in: TRACKABLE_ORDER_STATUSES } },
+      },
       include: DETAILS,
       orderBy: { offeredAt: 'desc' },
     });

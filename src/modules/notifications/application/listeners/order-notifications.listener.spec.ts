@@ -90,13 +90,28 @@ describe('OrderNotificationsListener — transitions', () => {
   it('stays quiet on the statuses the riders module already covers', async () => {
     const { listener, notify } = build();
 
-    for (const status of [OrderStatus.PREPARING, OrderStatus.PICKED_UP, OrderStatus.ON_THE_WAY]) {
+    for (const status of [OrderStatus.PREPARING, OrderStatus.PICKED_UP]) {
       await listener.onStatusChanged(event({ status }));
     }
 
     // A second message saying what the delivery code and the rider's name have
     // already said is how a notification list becomes something people mute.
     expect(notify.notify).not.toHaveBeenCalled();
+  });
+
+  it('tells the customer when the rider sets off, and pushes it', async () => {
+    const { listener, notify } = build();
+
+    await listener.onStatusChanged(event({ status: OrderStatus.ON_THE_WAY }));
+
+    // The one moment the customer has no other way to learn about: the map
+    // starts moving, and nothing else announces it.
+    expect(recipients(notify)).toEqual(['customer-1']);
+    expect(notify.notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channels: [NotificationChannel.IN_APP, NotificationChannel.PUSH],
+      }),
+    );
   });
 
   it('tells everyone still holding a cancelled order, including the rider', async () => {
