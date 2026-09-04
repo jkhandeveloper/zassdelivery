@@ -36,6 +36,7 @@ const DETAILS = {
       addressLine: true,
       latitude: true,
       longitude: true,
+      ownerId: true,
     },
   },
   customer: { select: { id: true, fullName: true, phone: true } },

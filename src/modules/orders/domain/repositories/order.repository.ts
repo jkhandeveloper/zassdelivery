@@ -21,9 +21,20 @@ export type OrderWithDetails = Order & {
   // Coordinates travel with the order because dispatch ranks riders by how far
   // they are from the kitchen, and re-reading the restaurant to find that out
   // would be a second query on the hottest path in the module.
+  // `ownerId` rides along for the same reason the coordinates do: the vendor is
+  // told about their own orders, and finding out who that is would otherwise be
+  // a restaurant read on every single transition.
   restaurant: Pick<
     Restaurant,
-    'id' | 'name' | 'slug' | 'logoUrl' | 'phone' | 'addressLine' | 'latitude' | 'longitude'
+    | 'id'
+    | 'name'
+    | 'slug'
+    | 'logoUrl'
+    | 'phone'
+    | 'addressLine'
+    | 'latitude'
+    | 'longitude'
+    | 'ownerId'
   >;
   customer: Pick<User, 'id' | 'fullName' | 'phone'>;
   driver: { id: string; userId: string; user: Pick<User, 'fullName' | 'phone'> } | null;

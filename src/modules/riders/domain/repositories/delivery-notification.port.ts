@@ -29,4 +29,22 @@ export abstract class DeliveryNotificationPort {
     riderName: string;
     riderPhone: string;
   }): Promise<void>;
+
+  /**
+   * Tells a rider a run is waiting for them.
+   *
+   * The socket push already reaches a rider with the app open; this is for the
+   * one whose phone is in their pocket. An offer has a sixty-second window, so
+   * it is the clearest case in the product for waking a device rather than
+   * waiting to be looked at.
+   */
+  abstract sendOfferToRider(input: {
+    riderUserId: string;
+    assignmentId: string;
+    orderId: string;
+    orderNumber: string;
+    restaurantName: string;
+    estimatedEarning: number;
+    expiresAt: Date;
+  }): Promise<void>;
 }

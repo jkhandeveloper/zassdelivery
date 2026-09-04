@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AssignmentStatus, DriverAvailability, Prisma } from '@prisma/client';
+import { AssignmentStatus, DriverAvailability, Prisma, type OrderStatus } from '@prisma/client';
 
 import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
 import type { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
@@ -235,6 +235,27 @@ export class PrismaAssignmentRepository extends AssignmentRepository {
     });
 
     return result.count;
+  }
+
+  async findOrderIdsAwaitingDispatch(statuses: OrderStatus[], limit: number): Promise<string[]> {
+    const orders = await this.prisma.order.findMany({
+      where: {
+        status: { in: statuses },
+        // No rider on the order and no live assignment are two different
+        // conditions, and both matter: `driverId` is only set once an offer is
+        // *accepted*, so an order with an offer still open would otherwise be
+        // offered to a second rider a few seconds later.
+        driverId: null,
+        assignments: { none: { status: { in: LIVE_STATUSES } } },
+      },
+      // Oldest first: the customer who has been waiting longest gets the next
+      // rider, rather than whoever ordered most recently jumping the queue.
+      orderBy: { placedAt: 'asc' },
+      take: limit,
+      select: { id: true },
+    });
+
+    return orders.map((order) => order.id);
   }
 
   async storeOtp(assignmentId: string, hash: string, issuedAt: Date): Promise<void> {

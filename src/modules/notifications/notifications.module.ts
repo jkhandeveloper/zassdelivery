@@ -27,6 +27,7 @@ import {
   MarkReadUseCase,
   UnreadCountUseCase,
 } from './application/use-cases/history.use-cases';
+import { OrderNotificationsListener } from './application/listeners/order-notifications.listener';
 import { NotifyService } from './application/use-cases/notify.service';
 import {
   BroadcastRepository,
@@ -54,6 +55,10 @@ import { PrismaNotificationRepository } from './infrastructure/repositories/pris
     PreferenceResolver,
 
     NotifyService,
+
+    // Listens to the orders module rather than being called by it, so nothing
+    // in the order lifecycle has to know that notifications exist.
+    OrderNotificationsListener,
 
     ListNotificationsUseCase,
     UnreadCountUseCase,

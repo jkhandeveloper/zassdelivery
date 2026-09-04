@@ -1,4 +1,5 @@
 import { Inject, Injectable, type LoggerService } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrderStatus, PaymentMethod } from '@prisma/client';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
@@ -8,7 +9,9 @@ import { CartRepository } from '@/modules/carts/domain/repositories/cart.reposit
 import { CartValidationService } from '@/modules/carts/domain/services/cart-validation.service';
 import { RealtimeService } from '@/modules/realtime/application/realtime.service';
 
+import { OrderEvents, type OrderStatusEventPayload } from '../../domain/events/order.events';
 import { OrderRepository } from '../../domain/repositories/order.repository';
+import { OrderStateMachine } from '../../domain/services/order-state-machine';
 import { toOrderDto, type OrderDto } from '../dto/order-response.dto';
 import type { PlaceOrderDto } from '../dto/order.dto';
 
@@ -21,6 +24,7 @@ export class PlaceOrderUseCase {
     private readonly assembler: CartAssemblerService,
     private readonly orders: OrderRepository,
     private readonly realtime: RealtimeService,
+    private readonly events: EventEmitter2,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -155,6 +159,27 @@ export class PlaceOrderUseCase {
         customerName: order.customer.fullName,
         placedAt: order.placedAt?.toISOString() ?? null,
       });
+
+      // Emitted only for an order that is actually live, on the same condition
+      // as the socket push above: a gateway order still waiting on the money is
+      // not something to notify anybody about yet.
+      const payload: OrderStatusEventPayload = {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        statusText: OrderStateMachine.describe(order.status),
+        previousStatus: null,
+        actor: null,
+        customerId: order.customerId,
+        restaurantId: order.restaurantId,
+        restaurantName: order.restaurant.name,
+        restaurantOwnerId: order.restaurant.ownerId,
+        driverUserId: null,
+        totalAmount: Number(order.totalAmount),
+        at: new Date().toISOString(),
+      };
+
+      this.events.emit(OrderEvents.placed, payload);
     }
 
     return toOrderDto(order, { includeTransactions: true });

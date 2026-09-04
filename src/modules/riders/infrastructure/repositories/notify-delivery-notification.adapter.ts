@@ -65,4 +65,32 @@ export class NotifyDeliveryNotificationAdapter extends DeliveryNotificationPort 
       },
     });
   }
+
+  async sendOfferToRider(input: {
+    riderUserId: string;
+    assignmentId: string;
+    orderId: string;
+    orderNumber: string;
+    restaurantName: string;
+    estimatedEarning: number;
+    expiresAt: Date;
+  }): Promise<void> {
+    await this.notify.notify({
+      userId: input.riderUserId,
+      type: NotificationType.ORDER_UPDATE,
+      title: `New run from ${input.restaurantName}`,
+      body:
+        `Order ${input.orderNumber} pays about ${Math.round(input.estimatedEarning)} PKR. ` +
+        'Open the app to accept it before the offer expires.',
+      data: {
+        assignmentId: input.assignmentId,
+        orderId: input.orderId,
+        expiresAt: input.expiresAt.toISOString(),
+        kind: 'delivery_offer',
+      },
+      // Same reasoning as the delivery code: an offer that only shows up in a
+      // list the rider has to go and open is an offer that expires unanswered.
+      channels: [NotificationChannel.IN_APP, NotificationChannel.PUSH],
+    });
+  }
 }

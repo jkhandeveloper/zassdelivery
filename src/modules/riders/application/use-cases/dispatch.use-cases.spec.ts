@@ -16,6 +16,7 @@ import type {
 import type { RealtimeService } from '@/modules/realtime/application/realtime.service';
 
 import type { AssignmentRepository } from '../../domain/repositories/assignment.repository';
+import type { DeliveryNotificationPort } from '../../domain/repositories/delivery-notification.port';
 import type { RiderRepository, RiderWithDetails } from '../../domain/repositories/rider.repository';
 import { DispatchService } from '../../domain/services/dispatch.service';
 import { EarningsCalculator } from '../../domain/services/earnings.calculator';
@@ -117,12 +118,19 @@ function build(options: {
     riderAssigned: jest.fn(),
   } as unknown as jest.Mocked<RealtimeService>;
 
+  const notifications = {
+    sendOfferToRider: jest.fn().mockResolvedValue(undefined),
+    sendRiderAssigned: jest.fn().mockResolvedValue(undefined),
+    sendDeliveryCode: jest.fn().mockResolvedValue(undefined),
+  } as unknown as jest.Mocked<DeliveryNotificationPort>;
+
   return {
     orders,
     riders,
     assignments,
     settings,
     realtime,
+    notifications,
     useCase: new AssignOrderUseCase(
       assignments,
       riders,
@@ -131,6 +139,7 @@ function build(options: {
       new EarningsCalculator(),
       settings,
       realtime,
+      notifications,
     ),
   };
 }

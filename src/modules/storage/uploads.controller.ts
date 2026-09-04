@@ -137,6 +137,13 @@ export class UploadsController {
       'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.fileName ?? name)}`,
       // The type is ours, taken from an allow-list at upload — never sniffed.
       'X-Content-Type-Options': 'nosniff',
+      // Helmet defaults every response to `same-origin`, which is right for the
+      // JSON API but silently breaks this route: the web app runs on its own
+      // origin, so an `<img>` pointed here is a cross-origin subresource and the
+      // browser drops it without an error anyone can see. These objects are
+      // meant to be embedded — the unguessable name is the capability, not the
+      // origin — so this one route opts out.
+      'Cross-Origin-Resource-Policy': 'cross-origin',
       // An unguessable URL is only unguessable while it stays out of an index.
       'X-Robots-Tag': 'noindex, nofollow',
       'Cache-Control': 'private, max-age=3600',

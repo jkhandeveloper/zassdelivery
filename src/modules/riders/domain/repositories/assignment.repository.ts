@@ -2,6 +2,7 @@ import type {
   AssignmentStatus,
   DeliveryAssignment,
   Order,
+  OrderStatus,
   Prisma,
   Restaurant,
   User,
@@ -95,6 +96,16 @@ export abstract class AssignmentRepository {
 
   /** Marks unanswered offers past their deadline as EXPIRED. Returns the count. */
   abstract expireStale(now: Date): Promise<number>;
+
+  /**
+   * Orders the kitchen has accepted that still have nobody carrying them.
+   *
+   * "Still" is the important word: an order whose offer was rejected or timed
+   * out comes back here, which is what makes the sweep a retry rather than a
+   * one-shot. Ordered oldest first so the order that has been waiting longest
+   * is the one that gets the next available rider.
+   */
+  abstract findOrderIdsAwaitingDispatch(statuses: OrderStatus[], limit: number): Promise<string[]>;
 
   // ── Delivery confirmation ────────────────────────────────────
 

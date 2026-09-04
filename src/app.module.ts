@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, type ConfigType } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 
 import { CommonModule } from './common/common.module';
@@ -45,6 +47,17 @@ import { SharedModule } from './shared/shared.module';
         throttlers: [{ ttl: config.ttl, limit: config.limit }],
       }),
     }),
+
+    // How a module tells another that something happened without importing it.
+    // `RidersModule` already imports `OrdersModule` for the shared state
+    // machine, so dispatch reacting to an order confirmation had to travel the
+    // other way round — and a forwardRef between two modules this central is
+    // wiring that boots fine and fails obscurely later.
+    EventEmitterModule.forRoot(),
+
+    // Timers. Currently: the dispatch sweep that gets orders to riders and
+    // expires offers nobody answered.
+    ScheduleModule.forRoot(),
 
     // Infrastructure: database, cache, logger.
     SharedModule,

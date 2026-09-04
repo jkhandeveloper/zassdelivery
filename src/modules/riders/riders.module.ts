@@ -4,6 +4,7 @@ import { CartsModule } from '../carts/carts.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OrdersModule } from '../orders/orders.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { DispatchCoordinator } from './application/services/dispatch-coordinator.service';
 import { RiderSettingsService } from './application/services/rider-settings.service';
 import {
   ConfirmDeliveryUseCase,
@@ -81,6 +82,7 @@ import { RidersController } from './riders.controller';
     RiderSettingsService,
     RiderAccessService,
     AssignmentAccessService,
+    DispatchCoordinator,
 
     RegisterRiderUseCase,
     GetMyRiderProfileUseCase,

@@ -54,6 +54,7 @@ export class AssignOrderUseCase {
     private readonly earnings: EarningsCalculator,
     private readonly settings: RiderSettingsService,
     private readonly realtime: RealtimeService,
+    private readonly notifications: DeliveryNotificationPort,
   ) {}
 
   /**
@@ -64,11 +65,15 @@ export class AssignOrderUseCase {
    * it. Pushing an order onto a rider who is stuck in traffic or has already
    * gone home produces an order that nobody is actually carrying, which is
    * worse than an unassigned one because it looks handled.
+   *
+   * `actor` is null when the auto-dispatcher called this rather than a person.
+   * It is only ever read to record who made a hand-picked assignment, so an
+   * automatic offer — which is always auto-selected — never needs one.
    */
   async execute(
     orderId: string,
     dto: AssignOrderDto,
-    actor: AuthenticatedUser,
+    actor: AuthenticatedUser | null,
   ): Promise<AssignmentDto> {
     const order = await this.orders.findById(orderId);
 
@@ -110,7 +115,7 @@ export class AssignOrderUseCase {
         order.distanceKm === null ? null : Number(order.distanceKm),
         rates,
       ),
-      assignedById: dto.driverId === undefined ? null : actor.id,
+      assignedById: dto.driverId === undefined ? null : (actor?.id ?? null),
       isAuto: dto.driverId === undefined,
     });
 
@@ -126,6 +131,25 @@ export class AssignOrderUseCase {
         assignment.pickupDistanceKm === null ? null : Number(assignment.pickupDistanceKm),
       expiresAt: assignment.expiresAt.toISOString(),
     });
+
+    // And a notification for the rider whose app is closed. Best-effort by the
+    // same rule the rest of the module follows: the offer is already committed,
+    // and a message that failed to send must not undo it.
+    const offered = await this.riders.findById(assignment.driverId);
+
+    if (offered !== null) {
+      await this.notifications
+        .sendOfferToRider({
+          riderUserId: offered.userId,
+          assignmentId: assignment.id,
+          orderId: assignment.orderId,
+          orderNumber: assignment.order.orderNumber,
+          restaurantName: assignment.order.restaurant.name,
+          estimatedEarning: Number(assignment.estimatedEarning),
+          expiresAt: assignment.expiresAt,
+        })
+        .catch(() => undefined);
+    }
 
     return toAssignmentDto(assignment);
   }

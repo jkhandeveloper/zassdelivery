@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ActorType, OrderStatus, PaymentStatus, UserRole } from '@prisma/client';
 
 import {
@@ -14,6 +15,7 @@ import { RestaurantRepository } from '@/modules/restaurants/domain/repositories/
 
 import { RealtimeService } from '@/modules/realtime/application/realtime.service';
 
+import { OrderEvents, type OrderStatusEventPayload } from '../../domain/events/order.events';
 import { OrderRepository, type OrderWithDetails } from '../../domain/repositories/order.repository';
 import { OrderStateMachine, REFUNDABLE_STATUSES } from '../../domain/services/order-state-machine';
 import {
@@ -47,6 +49,36 @@ const ACTIVE_STATUSES: OrderStatus[] = [
   OrderStatus.PICKED_UP,
   OrderStatus.ON_THE_WAY,
 ];
+
+/**
+ * Describes a transition for the listeners downstream of it.
+ *
+ * Built from the order *after* the move, plus the status it came from — which
+ * is what lets a listener act on the edge rather than the state: dispatch only
+ * cares about the moment an order becomes CONFIRMED, not about every later
+ * transition that leaves it dispatchable.
+ */
+function statusEvent(
+  order: OrderWithDetails,
+  actor: ActorType,
+  previousStatus: OrderStatus,
+): OrderStatusEventPayload {
+  return {
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    statusText: OrderStateMachine.describe(order.status),
+    previousStatus,
+    actor,
+    customerId: order.customerId,
+    restaurantId: order.restaurantId,
+    restaurantName: order.restaurant.name,
+    restaurantOwnerId: order.restaurant.ownerId,
+    driverUserId: order.driver?.userId ?? null,
+    totalAmount: Number(order.totalAmount),
+    at: new Date().toISOString(),
+  };
+}
 
 /**
  * Resolves which party the caller is acting as for a given order.
@@ -228,6 +260,7 @@ export class AdvanceOrderUseCase {
     private readonly orders: OrderRepository,
     private readonly access: OrderAccessService,
     private readonly realtime: RealtimeService,
+    private readonly events: EventEmitter2,
   ) {}
 
   /**
@@ -285,6 +318,7 @@ export class AdvanceOrderUseCase {
     // Announced after the transaction, never inside it: a customer's phone
     // being unreachable must not roll back an order the kitchen has accepted.
     this.announce(updated, as);
+    this.events.emit(OrderEvents.statusChanged, statusEvent(updated, as, order.status));
 
     return toOrderDto(updated, { includeTransactions: as === ActorType.ADMIN });
   }
@@ -325,6 +359,7 @@ export class CancelOrderUseCase {
     private readonly access: OrderAccessService,
     private readonly settings: DeliveryPricingRepository,
     private readonly realtime: RealtimeService,
+    private readonly events: EventEmitter2,
   ) {}
 
   async execute(
@@ -376,6 +411,8 @@ export class CancelOrderUseCase {
       customerName: updated.customer.fullName,
       placedAt: updated.placedAt?.toISOString() ?? null,
     });
+
+    this.events.emit(OrderEvents.statusChanged, statusEvent(updated, as, order.status));
 
     return toOrderDto(updated, { includeTransactions: true });
   }
