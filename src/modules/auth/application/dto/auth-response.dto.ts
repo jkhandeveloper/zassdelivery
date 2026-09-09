@@ -15,6 +15,9 @@ export class AuthUserDto {
   @ApiPropertyOptional({ example: 'ahmad@example.com', nullable: true })
   email!: string | null;
 
+  @ApiPropertyOptional({ example: 'https://cdn.example.com/avatars/ahmad.jpg', nullable: true })
+  avatarUrl!: string | null;
+
   @ApiProperty({ enum: UserRole, example: UserRole.CUSTOMER })
   role!: UserRole;
 

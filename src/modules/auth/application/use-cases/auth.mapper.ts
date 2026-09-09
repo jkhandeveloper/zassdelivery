@@ -15,6 +15,7 @@ export function toAuthUserDto(user: AuthUserRecord): AuthUserDto {
     phone: user.phone,
     fullName: user.fullName,
     email: user.email,
+    avatarUrl: user.avatarUrl,
     role: user.role,
     status: user.status,
     isPhoneVerified: user.phoneVerifiedAt !== null,
