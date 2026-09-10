@@ -9,6 +9,10 @@ import {
 } from '@prisma/client';
 
 import {
+  toStoredPaymentQrCodes,
+  type SetPaymentQrCodesDto,
+} from '@/common/dto/payment-qr-code.dto';
+import {
   BusinessRuleViolationException,
   ForbiddenOperationException,
   ResourceConflictException,
@@ -191,6 +195,30 @@ export class UpdateRiderProfileUseCase {
       ...(dto.payout?.accountNumber !== undefined && {
         payoutAccountNumber: dto.payout.accountNumber,
       }),
+    });
+
+    return toRiderDto(updated, { includePayout: true });
+  }
+}
+
+@Injectable()
+export class SetRiderPaymentQrCodesUseCase {
+  constructor(
+    private readonly riders: RiderRepository,
+    private readonly access: RiderAccessService,
+  ) {}
+
+  /**
+   * Replaces the QR codes a customer can scan to pay this rider at the door.
+   *
+   * Open to an applicant as well as an approved rider: like the payout details
+   * it is set-up, and it does nothing until the rider is carrying orders.
+   */
+  async execute(actor: AuthenticatedUser, dto: SetPaymentQrCodesDto): Promise<RiderDto> {
+    const rider = await this.access.mine(actor);
+
+    const updated = await this.riders.update(rider.id, {
+      paymentQrCodes: toStoredPaymentQrCodes(dto.codes),
     });
 
     return toRiderDto(updated, { includePayout: true });

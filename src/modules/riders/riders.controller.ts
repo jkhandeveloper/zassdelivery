@@ -16,6 +16,7 @@ import { UserRole } from '@prisma/client';
 import { ApiPaginatedResponse } from '@/common/decorators/api-paginated-response.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Roles } from '@/common/decorators/roles.decorator';
+import { SetPaymentQrCodesDto } from '@/common/dto/payment-qr-code.dto';
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
 import { ApiErrorResponseDto } from '@/common/dto/api-response.dto';
 import type { AuthenticatedUser } from '@/common/interfaces/authenticated-user.interface';
@@ -72,6 +73,7 @@ import {
   ListMyDocumentsUseCase,
   RegisterRiderUseCase,
   SetAvailabilityUseCase,
+  SetRiderPaymentQrCodesUseCase,
   UpdateLocationUseCase,
   UpdateRiderProfileUseCase,
   UploadDocumentUseCase,
@@ -98,6 +100,7 @@ export class RidersController {
     private readonly register: RegisterRiderUseCase,
     private readonly getProfile: GetMyRiderProfileUseCase,
     private readonly updateProfile: UpdateRiderProfileUseCase,
+    private readonly setPaymentQrCodes: SetRiderPaymentQrCodesUseCase,
     private readonly resubmit: ResubmitApplicationUseCase,
     private readonly listDocuments: ListMyDocumentsUseCase,
     private readonly uploadDocument: UploadDocumentUseCase,
@@ -162,6 +165,21 @@ export class RidersController {
   @ApiResponse({ status: 200, type: RiderDto })
   update(@CurrentUser() actor: AuthenticatedUser, @Body() dto: UpdateRiderDto): Promise<RiderDto> {
     return this.updateProfile.execute(actor, dto);
+  }
+
+  @Put('me/payment-qr-codes')
+  @ApiOperation({
+    summary: 'Set my scan-to-pay QR codes',
+    description:
+      'The JazzCash, Easypaisa or bank QRs a customer can scan at the door instead ' +
+      'of paying cash. Replaces the whole list; an empty list removes them.',
+  })
+  @ApiResponse({ status: 200, type: RiderDto })
+  paymentQrCodes(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Body() dto: SetPaymentQrCodesDto,
+  ): Promise<RiderDto> {
+    return this.setPaymentQrCodes.execute(actor, dto);
   }
 
   @Post('me/resubmit')

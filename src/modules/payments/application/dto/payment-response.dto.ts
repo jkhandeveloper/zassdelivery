@@ -9,6 +9,8 @@ import {
   type WebhookEvent,
 } from '@prisma/client';
 
+import { PaymentQrCodeDto } from '@/common/dto/payment-qr-code.dto';
+
 import type { PaymentWithContext } from '../../domain/repositories/payment.repository';
 import { PaymentStateMachine } from '../../domain/services/payment-state';
 
@@ -74,12 +76,13 @@ export class CheckoutDto {
 
   @ApiProperty({
     example: 'REDIRECT',
-    enum: ['REDIRECT', 'SETTLED', 'ON_DELIVERY'],
+    enum: ['REDIRECT', 'SETTLED', 'ON_DELIVERY', 'SCAN_QR'],
     description:
       'REDIRECT — send the customer to the gateway. SETTLED — paid already, ' +
-      'nothing more to do. ON_DELIVERY — the rider collects the cash.',
+      'nothing more to do. ON_DELIVERY — the rider collects the cash. SCAN_QR — ' +
+      'show the restaurant’s QR codes; the restaurant confirms when the money arrives.',
   })
-  action!: 'REDIRECT' | 'SETTLED' | 'ON_DELIVERY';
+  action!: 'REDIRECT' | 'SETTLED' | 'ON_DELIVERY' | 'SCAN_QR';
 
   @ApiProperty({ example: 'Pay the rider Rs. 1240 when your order arrives.' })
   message!: string;
@@ -89,6 +92,37 @@ export class CheckoutDto {
     description: 'Present only when action is REDIRECT.',
   })
   checkout?: CheckoutFieldsDto;
+
+  @ApiPropertyOptional({
+    type: [PaymentQrCodeDto],
+    description: 'Present only when action is SCAN_QR: the restaurant’s codes to scan.',
+  })
+  qrCodes?: PaymentQrCodeDto[];
+}
+
+export class PaymentQrPayeeDto {
+  @ApiProperty({ example: 'Chapli Kabab House' }) name!: string;
+  @ApiProperty({ type: [PaymentQrCodeDto] }) codes!: PaymentQrCodeDto[];
+}
+
+export class OrderPaymentQrDto {
+  @ApiProperty() orderId!: string;
+  @ApiProperty({
+    example: 'ZD-260810-0007',
+    description: 'Worth quoting in the transfer note, so the payee can match it.',
+  })
+  orderNumber!: string;
+  @ApiProperty({ example: 1240 }) amount!: number;
+  @ApiProperty({ example: 'PKR' }) currency!: string;
+  @ApiProperty({ enum: PaymentMethod }) paymentMethod!: PaymentMethod;
+  @ApiProperty({ enum: PaymentStatus }) paymentStatus!: PaymentStatus;
+  @ApiProperty({ type: PaymentQrPayeeDto }) restaurant!: PaymentQrPayeeDto;
+  @ApiPropertyOptional({
+    type: PaymentQrPayeeDto,
+    nullable: true,
+    description: 'The rider carrying the order, once one has accepted it.',
+  })
+  rider!: PaymentQrPayeeDto | null;
 }
 
 export class GatewayAvailabilityDto {

@@ -8,6 +8,8 @@ import {
   type RestaurantImage,
 } from '@prisma/client';
 
+import { PaymentQrCodeDto, toPaymentQrCodes } from '@/common/dto/payment-qr-code.dto';
+
 import type { RestaurantWithRelations } from '../../domain/repositories/restaurant.repository';
 import type { OpenState } from '../../domain/services/opening-hours.service';
 
@@ -185,6 +187,14 @@ export class RestaurantAdminDto extends RestaurantDto {
 
   @ApiPropertyOptional({ nullable: true })
   deletedAt!: Date | null;
+
+  @ApiProperty({
+    type: [PaymentQrCodeDto],
+    description:
+      'Where scan-to-pay customers send money. Customers are shown these on their ' +
+      'own order, never on the public listing.',
+  })
+  paymentQrCodes!: PaymentQrCodeDto[];
 }
 
 export function toImageDto(image: RestaurantImage): RestaurantImageDto {
@@ -282,5 +292,6 @@ export function toRestaurantDto(
     approvedById: restaurant.approvedById,
     rejectionReason: restaurant.rejectionReason,
     deletedAt: restaurant.deletedAt,
+    paymentQrCodes: toPaymentQrCodes(restaurant.paymentQrCodes),
   };
 }

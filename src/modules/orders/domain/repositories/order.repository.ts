@@ -35,9 +35,17 @@ export type OrderWithDetails = Order & {
     | 'latitude'
     | 'longitude'
     | 'ownerId'
+    // The scan-to-pay codes, for the same reason: a customer paying for this
+    // order is shown exactly the kitchen and rider it belongs to.
+    | 'paymentQrCodes'
   >;
   customer: Pick<User, 'id' | 'fullName' | 'phone'>;
-  driver: { id: string; userId: string; user: Pick<User, 'fullName' | 'phone'> } | null;
+  driver: {
+    id: string;
+    userId: string;
+    paymentQrCodes: Prisma.JsonValue;
+    user: Pick<User, 'fullName' | 'phone'>;
+  } | null;
   address: Address | null;
   items: Array<OrderItem & { addOns: OrderItemAddOn[] }>;
   statusHistory: OrderStatusHistory[];

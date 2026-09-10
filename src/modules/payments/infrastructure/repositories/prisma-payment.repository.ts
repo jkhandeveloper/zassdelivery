@@ -12,7 +12,10 @@ import {
   type Transaction,
 } from '@prisma/client';
 
-import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
+import {
+  BusinessRuleViolationException,
+  ResourceConflictException,
+} from '@/common/exceptions/domain.exception';
 import type { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
 import { paginate } from '@/common/utils/pagination.util';
 import { PrismaService } from '@/infrastructure/prisma/prisma.service';
@@ -27,8 +30,13 @@ import {
   type PaymentWithContext,
   type RecordRefundInput,
   type SettleInput,
+  type SettleManualTransferInput,
 } from '../../domain/repositories/payment.repository';
-import { OPEN_STATUSES, PaymentStateMachine } from '../../domain/services/payment-state';
+import {
+  OPEN_STATUSES,
+  PaymentStateMachine,
+  SETTLED_STATUSES,
+} from '../../domain/services/payment-state';
 
 const CONTEXT = {
   order: {
@@ -339,6 +347,125 @@ export class PrismaPaymentRepository extends PaymentRepository {
       });
 
       return tx.payment.findUniqueOrThrow({ where: { id: paymentId }, include: CONTEXT });
+    });
+  }
+
+  async settleManualTransfer(input: SettleManualTransferInput): Promise<PaymentWithContext> {
+    return this.prisma.$transaction(async (tx) => {
+      // The rider at the door and the owner checking their phone may both
+      // confirm the same transfer. That is one payment, not two.
+      const settled = await tx.payment.findFirst({
+        where: { orderId: input.orderId, status: { in: SETTLED_STATUSES } },
+        include: CONTEXT,
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (settled !== null) {
+        return settled;
+      }
+
+      if (input.reference !== null) {
+        const clash = await tx.payment.findUnique({
+          where: { gatewayTransactionId: input.reference },
+          select: { order: { select: { orderNumber: true } } },
+        });
+
+        // A TID is proof of one transfer. Accepting it twice is how one
+        // screenshot pays for two dinners.
+        if (clash !== null) {
+          throw new ResourceConflictException(
+            `Transaction ID ${input.reference} has already confirmed order ${clash.order.orderNumber}.`,
+          );
+        }
+      }
+
+      const open = await tx.payment.findFirst({
+        where: {
+          orderId: input.orderId,
+          method: PaymentMethod.QR_TRANSFER,
+          status: { in: OPEN_STATUSES },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const attempt =
+        open ??
+        (await tx.payment.create({
+          data: {
+            orderId: input.orderId,
+            userId: input.userId,
+            method: PaymentMethod.QR_TRANSFER,
+            amount: input.amount,
+            reference: await this.nextReference(tx),
+            status: PaymentStatus.PENDING,
+          },
+        }));
+
+      PaymentStateMachine.assertTransition(attempt.status, PaymentStatus.PAID);
+
+      const now = new Date();
+
+      // Whatever else was still open — typically the cash attempt a COD order
+      // was placed with — is superseded: the order has been paid another way.
+      await tx.payment.updateMany({
+        where: { orderId: input.orderId, status: { in: OPEN_STATUSES }, id: { not: attempt.id } },
+        data: {
+          status: PaymentStatus.CANCELLED,
+          failureReason: 'Superseded — paid by QR transfer instead.',
+          failedAt: now,
+        },
+      });
+
+      const receipt = {
+        channel: input.channel,
+        reference: input.reference,
+        recipient: input.recipient,
+        recordedBy: input.recordedBy,
+      };
+
+      await tx.payment.update({
+        where: { id: attempt.id },
+        data: {
+          status: PaymentStatus.PAID,
+          paidAt: now,
+          gatewayTransactionId: input.reference,
+          gatewayResponse: receipt,
+          failureReason: null,
+        },
+      });
+
+      // Re-labelled as well as settled: the order-level method is what the
+      // doorstep cash settlement keys on, and this order is no longer owed in cash.
+      await tx.order.update({
+        where: { id: input.orderId },
+        data: { paymentStatus: PaymentStatus.PAID, paymentMethod: PaymentMethod.QR_TRANSFER },
+      });
+
+      await tx.transaction.create({
+        data: {
+          paymentId: attempt.id,
+          orderId: input.orderId,
+          userId: input.userId,
+          type: TransactionType.PAYMENT,
+          status: TransactionStatus.SUCCESS,
+          amount: attempt.amount,
+          reference: `TXN-${attempt.reference ?? attempt.id}-QR`,
+          description: input.description,
+          metadata: receipt,
+          processedAt: now,
+        },
+      });
+
+      await tx.transaction.updateMany({
+        where: {
+          orderId: input.orderId,
+          type: TransactionType.COMMISSION,
+          status: TransactionStatus.PENDING,
+        },
+        data: { status: TransactionStatus.SUCCESS, processedAt: now },
+      });
+
+      return tx.payment.findUniqueOrThrow({ where: { id: attempt.id }, include: CONTEXT });
     });
   }
 

@@ -209,8 +209,12 @@ export class RefundPaymentUseCase {
         : ` The gateway refused the return (${context.gatewayRefusal}).`;
     }
 
-    return context.method === PaymentMethod.CASH_ON_DELIVERY
-      ? ' Cash orders have no instrument to return to.'
+    if (context.method === PaymentMethod.CASH_ON_DELIVERY) {
+      return ' Cash orders have no instrument to return to.';
+    }
+
+    return context.method === PaymentMethod.QR_TRANSFER
+      ? ' A QR transfer went straight to the payee, so there is no instrument to return it to.'
       : ' The original payment method is not available for refunds on this deployment.';
   }
 }

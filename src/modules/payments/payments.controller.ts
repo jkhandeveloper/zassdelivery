@@ -12,14 +12,17 @@ import {
   GatewayAvailabilityDto,
   InvoiceDto,
   InvoiceSummaryDto,
+  OrderPaymentQrDto,
   PaymentDto,
   PaymentVerificationDto,
   TransactionDto,
 } from './application/dto/payment-response.dto';
 import {
   ListInvoicesQueryDto,
+  ListPaymentMethodsQueryDto,
   ListPaymentsQueryDto,
   ListTransactionsQueryDto,
+  MarkPaymentReceivedDto,
   StartCheckoutDto,
 } from './application/dto/payment.dto';
 import {
@@ -28,6 +31,10 @@ import {
   StartCheckoutUseCase,
 } from './application/use-cases/checkout.use-cases';
 import { GetInvoiceUseCase, ListInvoicesUseCase } from './application/use-cases/invoice.use-cases';
+import {
+  GetOrderPaymentQrUseCase,
+  MarkPaymentReceivedUseCase,
+} from './application/use-cases/scan-to-pay.use-cases';
 import {
   ListTransactionsUseCase,
   OrderTransactionsUseCase,
@@ -55,6 +62,8 @@ export class PaymentsController {
     private readonly gateways: ListGatewaysUseCase,
     private readonly startCheckout: StartCheckoutUseCase,
     private readonly cancelCheckout: CancelCheckoutUseCase,
+    private readonly orderQrCodes: GetOrderPaymentQrUseCase,
+    private readonly markReceived: MarkPaymentReceivedUseCase,
     private readonly verify: VerifyPaymentUseCase,
     private readonly getPayment: GetPaymentUseCase,
     private readonly listPayments: ListPaymentsUseCase,
@@ -72,11 +81,12 @@ export class PaymentsController {
     description:
       'Read this rather than hard-coding a list: a gateway whose credentials ' +
       'are missing reports itself unavailable here, so the checkout screen can ' +
-      'grey it out instead of failing after the customer commits to paying.',
+      'grey it out instead of failing after the customer commits to paying. ' +
+      'Pass restaurantId to learn whether that restaurant takes scan-to-pay.',
   })
   @ApiResponse({ status: 200, type: [GatewayAvailabilityDto] })
-  methods(): GatewayAvailabilityDto[] {
-    return this.gateways.execute();
+  methods(@Query() query: ListPaymentMethodsQueryDto): Promise<GatewayAvailabilityDto[]> {
+    return this.gateways.execute(query.restaurantId);
   }
 
   @Post('orders/:orderId/checkout')
@@ -103,6 +113,48 @@ export class PaymentsController {
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<CheckoutDto> {
     return this.startCheckout.execute(orderId, dto, actor);
+  }
+
+  @Get('orders/:orderId/qr-codes')
+  @ApiParam({ name: 'orderId' })
+  @ApiOperation({
+    summary: 'The QR codes that pay for an order',
+    description:
+      'The restaurant’s scan-to-pay codes, and the rider’s once one has the order, ' +
+      'with the amount and payment state. Poll while the payment is pending: it ' +
+      'turns PAID when the payee confirms the transfer. Customer and staff only.',
+  })
+  @ApiResponse({ status: 200, type: OrderPaymentQrDto })
+  qrCodes(
+    @Param('orderId') orderId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<OrderPaymentQrDto> {
+    return this.orderQrCodes.execute(orderId, actor);
+  }
+
+  @Post('orders/:orderId/mark-received')
+  @HttpCode(HttpStatus.OK)
+  @ApiParam({ name: 'orderId' })
+  @ApiOperation({
+    summary: 'Confirm a scanned-QR payment arrived',
+    description:
+      'For the restaurant or the rider carrying the order, once the transfer shows ' +
+      'in their JazzCash, Easypaisa or bank app — there is no gateway to confirm it ' +
+      'for them. Works for scan-to-pay orders and for cash orders the customer paid ' +
+      'by QR instead. The transaction ID is optional, but one ID can confirm one order only.',
+  })
+  @ApiResponse({ status: 200, type: PaymentDto })
+  @ApiResponse({ status: 409, description: 'That transaction ID already confirmed another order.' })
+  @ApiResponse({
+    status: 422,
+    description: 'Already paid, cancelled, or paid online through a gateway.',
+  })
+  markPaymentReceived(
+    @Param('orderId') orderId: string,
+    @Body() dto: MarkPaymentReceivedDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PaymentDto> {
+    return this.markReceived.execute(orderId, dto, actor);
   }
 
   @Post(':id/verify')

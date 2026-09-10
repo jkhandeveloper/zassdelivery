@@ -51,6 +51,7 @@ export const OFFLINE_METHODS: PaymentMethod[] = [
   PaymentMethod.CASH_ON_DELIVERY,
   PaymentMethod.WALLET,
   PaymentMethod.BANK_TRANSFER,
+  PaymentMethod.QR_TRANSFER,
 ];
 
 export class PaymentStateMachine {
@@ -119,6 +120,10 @@ export class PaymentStateMachine {
   static describe(status: PaymentStatus, method: PaymentMethod): string {
     if (status === PaymentStatus.PENDING && method === PaymentMethod.CASH_ON_DELIVERY) {
       return 'Pay the rider when your order arrives';
+    }
+
+    if (status === PaymentStatus.PENDING && method === PaymentMethod.QR_TRANSFER) {
+      return 'Waiting for the transfer to be confirmed';
     }
 
     const text: Record<PaymentStatus, string> = {

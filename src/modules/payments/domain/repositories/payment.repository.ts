@@ -74,6 +74,24 @@ export interface FailInput {
   failOrder: boolean;
 }
 
+/** A direct transfer, as confirmed by whoever it reached. */
+export interface SettleManualTransferInput {
+  orderId: string;
+  /** The paying customer. */
+  userId: string;
+  amount: number;
+  /** Which app or bank the money came through. */
+  channel: string;
+  /** The payee's transaction id for the transfer, when they gave one. */
+  reference: string | null;
+  /** Whose account it landed in. */
+  recipient: 'RESTAURANT' | 'RIDER' | 'PLATFORM';
+  /** The user who confirmed it. */
+  recordedBy: string;
+  /** Ledger wording, e.g. "Paid by JazzCash to Chapli Kabab House". */
+  description: string;
+}
+
 export interface RecordRefundInput {
   paymentId: string;
   orderId: string;
@@ -145,6 +163,17 @@ export abstract class PaymentRepository {
 
   /** Marks the money collected on the doorstep for a cash order. */
   abstract settleCash(paymentId: string, actorId: string): Promise<PaymentWithContext>;
+
+  /**
+   * Records a scanned-QR transfer as received, on the payee's word.
+   *
+   * Every other open attempt on the order is closed and the order is re-labelled
+   * QR_TRANSFER — the way it was actually paid — so a cash order paid by
+   * scanning the rider's code is never settled a second time as cash at the
+   * door. A transaction id already used on another payment is refused.
+   * Idempotent on the order: a second confirmation returns the first.
+   */
+  abstract settleManualTransfer(input: SettleManualTransferInput): Promise<PaymentWithContext>;
 
   abstract totalRefunded(paymentId: string): Promise<number>;
 

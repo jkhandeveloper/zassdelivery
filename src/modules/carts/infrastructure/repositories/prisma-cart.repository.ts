@@ -25,6 +25,8 @@ const CONTENTS = {
       latitude: true,
       longitude: true,
       deliveryRadiusMeters: true,
+      // Placing a scan-to-pay order checks the restaurant actually has a code.
+      paymentQrCodes: true,
     },
   },
   address: true,

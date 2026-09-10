@@ -38,6 +38,7 @@ const CUSTOMER_PAYMENT_METHODS = [
   PaymentMethod.WALLET,
   PaymentMethod.JAZZCASH,
   PaymentMethod.EASYPAISA,
+  PaymentMethod.QR_TRANSFER,
 ] as const;
 
 export class PlaceOrderDto {
@@ -48,7 +49,10 @@ export class PlaceOrderDto {
       'Cash and wallet settle here and the order goes straight to the ' +
       'restaurant. JazzCash and Easypaisa hold the order in PENDING_PAYMENT ' +
       'until the money lands — start the payment with ' +
-      'POST /payments/orders/{orderId}/checkout and send the customer to the gateway.',
+      'POST /payments/orders/{orderId}/checkout and send the customer to the gateway. ' +
+      'QR_TRANSFER also goes straight to the restaurant, with the payment pending ' +
+      'until the restaurant or rider confirms the transfer arrived; it is refused ' +
+      'for a restaurant that has no QR codes.',
   })
   @IsOptional()
   @IsIn(CUSTOMER_PAYMENT_METHODS, {

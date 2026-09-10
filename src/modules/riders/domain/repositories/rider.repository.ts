@@ -59,6 +59,8 @@ export interface UpdateRiderInput {
   payoutBankName?: string | null;
   payoutAccountTitle?: string | null;
   payoutAccountNumber?: string | null;
+  /** The scan-to-pay list, replaced wholesale. */
+  paymentQrCodes?: Prisma.InputJsonArray;
 }
 
 export interface SetRiderStatusInput {

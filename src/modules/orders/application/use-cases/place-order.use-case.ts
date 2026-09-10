@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrderStatus, PaymentMethod } from '@prisma/client';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
+import { toPaymentQrCodes } from '@/common/dto/payment-qr-code.dto';
 import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
 import { CartAssemblerService } from '@/modules/carts/application/use-cases/cart-assembler.service';
 import { CartRepository } from '@/modules/carts/domain/repositories/cart.repository';
@@ -65,6 +66,19 @@ export class PlaceOrderUseCase {
     }
 
     const method = dto.paymentMethod ?? PaymentMethod.CASH_ON_DELIVERY;
+
+    // Scan-to-pay needs something to scan. Refused here rather than discovered
+    // on the order screen, where the customer would be holding an order with no
+    // way to pay for it.
+    if (
+      method === PaymentMethod.QR_TRANSFER &&
+      toPaymentQrCodes(cart.restaurant.paymentQrCodes).length === 0
+    ) {
+      throw new BusinessRuleViolationException(
+        `${cart.restaurant.name} does not take scan-to-pay yet. Choose cash on delivery instead.`,
+      );
+    }
+
     const totals = priced.totals;
 
     const preparationMinutes = cart.restaurant.avgPreparationMinutes;

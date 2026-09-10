@@ -26,6 +26,7 @@ export type CartWithContents = Cart & {
     | 'latitude'
     | 'longitude'
     | 'deliveryRadiusMeters'
+    | 'paymentQrCodes'
   >;
   address: Address | null;
   coupon: Coupon | null;

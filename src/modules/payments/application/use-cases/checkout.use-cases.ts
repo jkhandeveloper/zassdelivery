@@ -8,9 +8,14 @@ import {
   ForbiddenOperationException,
   ResourceNotFoundException,
 } from '@/common/exceptions/domain.exception';
+import { toPaymentQrCodes } from '@/common/dto/payment-qr-code.dto';
 import type { AuthenticatedUser } from '@/common/interfaces/authenticated-user.interface';
 import { paymentsConfig } from '@/config';
-import { OrderRepository } from '@/modules/orders/domain/repositories/order.repository';
+import {
+  OrderRepository,
+  type OrderWithDetails,
+} from '@/modules/orders/domain/repositories/order.repository';
+import { RestaurantRepository } from '@/modules/restaurants/domain/repositories/restaurant.repository';
 
 import {
   PaymentRepository,
@@ -65,7 +70,10 @@ export class PaymentAccessService {
 
 @Injectable()
 export class ListGatewaysUseCase {
-  constructor(private readonly gateways: PaymentGatewayRegistry) {}
+  constructor(
+    private readonly gateways: PaymentGatewayRegistry,
+    private readonly restaurants: RestaurantRepository,
+  ) {}
 
   /**
    * What this deployment can actually take money with.
@@ -73,18 +81,29 @@ export class ListGatewaysUseCase {
    * The checkout screen reads this rather than hard-coding a list, so a gateway
    * whose credentials are missing is greyed out up front instead of failing at
    * the moment the customer commits to paying.
+   *
+   * Scan-to-pay depends on the restaurant rather than the deployment: it is
+   * available only when the kitchen being ordered from has put up a QR code.
    */
-  execute(): GatewayAvailabilityDto[] {
+  async execute(restaurantId?: string): Promise<GatewayAvailabilityDto[]> {
     const online = this.gateways.all().map((gateway) => ({
       name: gateway.name,
       method: gateway.method,
       available: gateway.isConfigured(),
     }));
 
+    const restaurant =
+      restaurantId === undefined ? null : await this.restaurants.findById(restaurantId);
+
     return [
       { name: 'cash', method: PaymentMethod.CASH_ON_DELIVERY, available: true },
       { name: 'wallet', method: PaymentMethod.WALLET, available: true },
       ...online,
+      {
+        name: 'qr',
+        method: PaymentMethod.QR_TRANSFER,
+        available: restaurant !== null && toPaymentQrCodes(restaurant.paymentQrCodes).length > 0,
+      },
     ];
   }
 }
@@ -147,7 +166,75 @@ export class StartCheckoutUseCase {
       );
     }
 
+    if (dto.method === PaymentMethod.QR_TRANSFER) {
+      return this.scanToPay(order, actor.id, amount);
+    }
+
     return this.online(order, dto.method, actor, amount);
+  }
+
+  /**
+   * Scan-to-pay: nothing to redirect to, only the restaurant's codes to scan.
+   *
+   * The attempt stays PENDING until the restaurant or the rider confirms the
+   * money arrived — there is no gateway to say so, so a person has to.
+   */
+  private async scanToPay(
+    order: OrderWithDetails,
+    userId: string,
+    amount: number,
+  ): Promise<CheckoutDto> {
+    // Chosen when the order is placed, like cash, so the ticket tells the
+    // kitchen and the rider from the start that no cash is due. Switching a
+    // cash order here would leave the rider collecting money already sent.
+    if (order.paymentMethod !== PaymentMethod.QR_TRANSFER) {
+      throw new BusinessRuleViolationException(
+        'Scan-to-pay is chosen when the order is placed. A cash order can still be paid ' +
+          'by scanning your rider’s code at the door.',
+      );
+    }
+
+    const codes = toPaymentQrCodes(order.restaurant.paymentQrCodes);
+
+    if (codes.length === 0) {
+      throw new BusinessRuleViolationException(
+        `${order.restaurant.name} no longer takes scan-to-pay. Pay the rider in cash instead.`,
+      );
+    }
+
+    const open = await this.payments.findOpenForOrder(order.id);
+
+    if (open !== null && open.method !== PaymentMethod.QR_TRANSFER) {
+      await this.payments.fail({
+        paymentId: open.id,
+        reason: 'Superseded — the customer chose scan-to-pay instead.',
+        gatewayResponse: null,
+        status: PaymentStatus.CANCELLED,
+        failOrder: false,
+      });
+    }
+
+    const payment =
+      open !== null && open.method === PaymentMethod.QR_TRANSFER
+        ? open
+        : await this.payments.createAttempt({
+            orderId: order.id,
+            userId,
+            method: PaymentMethod.QR_TRANSFER,
+            amount,
+            gatewayName: null,
+            // The restaurant confirms in its own time; there is no window to close.
+            expiresAt: null,
+          });
+
+    return {
+      payment: toPaymentDto(payment),
+      action: 'SCAN_QR',
+      message:
+        `Scan a code and send Rs. ${amount} to ${order.restaurant.name}, quoting ` +
+        `${order.orderNumber}. The restaurant confirms once it arrives.`,
+      qrCodes: codes,
+    };
   }
 
   private async cashOnDelivery(

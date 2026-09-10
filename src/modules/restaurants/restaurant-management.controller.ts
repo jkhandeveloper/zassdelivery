@@ -16,6 +16,7 @@ import { UserRole } from '@prisma/client';
 
 import { ApiPaginatedResponse } from '@/common/decorators/api-paginated-response.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { PaymentQrCodeDto, SetPaymentQrCodesDto } from '@/common/dto/payment-qr-code.dto';
 import { RequirePermissions } from '@/common/decorators/permissions.decorator';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { ApiErrorResponseDto } from '@/common/dto/api-response.dto';
@@ -60,6 +61,7 @@ import {
   ReorderRestaurantImagesUseCase,
   SetBusinessHoursUseCase,
 } from './application/use-cases/hours-images.use-cases';
+import { SetRestaurantPaymentQrCodesUseCase } from './application/use-cases/payment-qr.use-cases';
 import {
   DeleteRestaurantUseCase,
   GetRestaurantUseCase,
@@ -96,6 +98,7 @@ export class RestaurantManagementController {
     private readonly addImage: AddRestaurantImageUseCase,
     private readonly deleteImage: DeleteRestaurantImageUseCase,
     private readonly reorderImages: ReorderRestaurantImagesUseCase,
+    private readonly setPaymentQrCodes: SetRestaurantPaymentQrCodesUseCase,
     private readonly registerStaff: RegisterRestaurantStaffUseCase,
     private readonly listStaff: ListRestaurantStaffUseCase,
   ) {}
@@ -342,6 +345,26 @@ export class RestaurantManagementController {
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<MessageResponseDto> {
     return this.deleteImage.execute(id, imageId, actor);
+  }
+
+  // ── Scan-to-pay ────────────────────────────────────────────
+
+  @Put(':id/payment-qr-codes')
+  @ApiParam({ name: 'id' })
+  @ApiOperation({
+    summary: 'Set scan-to-pay QR codes',
+    description:
+      'The JazzCash, Easypaisa and bank QRs a customer scans to pay this restaurant ' +
+      'directly. Replaces the whole list; an empty list turns scan-to-pay off at ' +
+      'checkout. Owner only — staff cannot change where the takings go.',
+  })
+  @ApiResponse({ status: 200, type: [PaymentQrCodeDto] })
+  paymentQrCodes(
+    @Param('id') id: string,
+    @Body() dto: SetPaymentQrCodesDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PaymentQrCodeDto[]> {
+    return this.setPaymentQrCodes.execute(id, dto, actor);
   }
 
   // ── Staff ──────────────────────────────────────────────────

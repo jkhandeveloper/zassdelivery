@@ -12,6 +12,7 @@ export enum UploadFolder {
   MenuItems = 'menu-items',
   Avatars = 'avatars',
   SupportAttachments = 'support-attachments',
+  PaymentQrCodes = 'payment-qr-codes',
 }
 
 /**

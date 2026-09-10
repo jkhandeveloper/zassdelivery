@@ -21,6 +21,7 @@ import {
 } from 'class-validator';
 
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
+import { PAYMENT_QR_PROVIDERS, type PaymentQrProvider } from '@/common/dto/payment-qr-code.dto';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -31,6 +32,7 @@ const CUSTOMER_METHODS = [
   PaymentMethod.WALLET,
   PaymentMethod.JAZZCASH,
   PaymentMethod.EASYPAISA,
+  PaymentMethod.QR_TRANSFER,
 ] as const;
 
 export class StartCheckoutDto {
@@ -38,12 +40,51 @@ export class StartCheckoutDto {
     enum: CUSTOMER_METHODS,
     description:
       'How the customer wants to pay. Cash and wallet settle in-house; ' +
-      'JazzCash and Easypaisa return checkout parameters to post to the gateway.',
+      'JazzCash and Easypaisa return checkout parameters to post to the gateway; ' +
+      'QR_TRANSFER returns the restaurant’s QR codes to scan.',
   })
   @IsIn(CUSTOMER_METHODS, {
     message: `method must be one of: ${CUSTOMER_METHODS.join(', ')}`,
   })
   method!: (typeof CUSTOMER_METHODS)[number];
+}
+
+export class ListPaymentMethodsQueryDto {
+  @ApiPropertyOptional({
+    description:
+      'The restaurant being checked out from. Scan-to-pay is only reported ' +
+      'available when that restaurant has put up a QR code.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  restaurantId?: string;
+}
+
+export class MarkPaymentReceivedDto {
+  @ApiProperty({
+    enum: PAYMENT_QR_PROVIDERS,
+    example: 'JAZZCASH',
+    description: 'Which app or bank the money arrived through.',
+  })
+  @IsIn(PAYMENT_QR_PROVIDERS, {
+    message: `channel must be one of: ${PAYMENT_QR_PROVIDERS.join(', ')}`,
+  })
+  channel!: PaymentQrProvider;
+
+  @ApiPropertyOptional({
+    example: '012345678901',
+    description:
+      'The transaction ID (TID) your JazzCash, Easypaisa or bank app shows for ' +
+      'the transfer. One TID can confirm one order only.',
+    maxLength: 120,
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(4)
+  @MaxLength(120)
+  @Transform(trim)
+  reference?: string;
 }
 
 export class RefundPaymentDto {

@@ -98,6 +98,11 @@ export abstract class RestaurantRepository {
     context: { approvedById?: string; rejectionReason?: string },
   ): Promise<RestaurantWithRelations>;
   abstract setAcceptingOrders(id: string, accepting: boolean): Promise<RestaurantWithRelations>;
+  /** Replaces the scan-to-pay QR list wholesale. */
+  abstract setPaymentQrCodes(
+    id: string,
+    codes: Prisma.InputJsonArray,
+  ): Promise<RestaurantWithRelations>;
 
   // ── Opening hours ──
   abstract findHours(restaurantId: string): Promise<RestaurantHour[]>;

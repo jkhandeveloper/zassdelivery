@@ -18,6 +18,8 @@ import {
   type WalletTransaction,
 } from '@prisma/client';
 
+import { PaymentQrCodeDto, toPaymentQrCodes } from '@/common/dto/payment-qr-code.dto';
+
 import type { AssignmentWithOrder } from '../../domain/repositories/assignment.repository';
 import type { RiderWithDetails } from '../../domain/repositories/rider.repository';
 import { RiderLifecycle } from '../../domain/services/rider-lifecycle';
@@ -107,6 +109,14 @@ export class RiderDto {
 
   @ApiPropertyOptional({ type: RiderPayoutDetailsDto })
   payout?: RiderPayoutDetailsDto;
+
+  @ApiPropertyOptional({
+    type: [PaymentQrCodeDto],
+    description:
+      'The QR codes customers can scan to pay this rider at the door. Returned with ' +
+      'the payout details — to the rider and to staff.',
+  })
+  paymentQrCodes?: PaymentQrCodeDto[];
 
   @ApiPropertyOptional({ nullable: true }) verifiedAt!: Date | null;
   @ApiProperty() createdAt!: Date;
@@ -356,6 +366,7 @@ export function toRiderDto(rider: RiderWithDetails, options: RiderDtoOptions = {
         accountTitle: rider.payoutAccountTitle,
         accountNumber: mask(rider.payoutAccountNumber),
       },
+      paymentQrCodes: toPaymentQrCodes(rider.paymentQrCodes),
     }),
     verifiedAt: rider.verifiedAt,
     createdAt: rider.createdAt,

@@ -23,6 +23,7 @@ import {
   ReorderRestaurantImagesUseCase,
   SetBusinessHoursUseCase,
 } from './application/use-cases/hours-images.use-cases';
+import { SetRestaurantPaymentQrCodesUseCase } from './application/use-cases/payment-qr.use-cases';
 import {
   DeleteRestaurantUseCase,
   GetRestaurantUseCase,
@@ -78,6 +79,7 @@ import {
     AddRestaurantImageUseCase,
     DeleteRestaurantImageUseCase,
     ReorderRestaurantImagesUseCase,
+    SetRestaurantPaymentQrCodesUseCase,
 
     ListCategoriesUseCase,
     CreateCategoryUseCase,

@@ -9,6 +9,7 @@ import type {
   OrderRepository,
   OrderWithDetails,
 } from '@/modules/orders/domain/repositories/order.repository';
+import type { RestaurantRepository } from '@/modules/restaurants/domain/repositories/restaurant.repository';
 
 import type {
   PaymentRepository,
@@ -112,22 +113,55 @@ function build(options: {
 }
 
 describe('ListGatewaysUseCase', () => {
-  it('always offers cash and wallet, whatever the gateway credentials are', () => {
+  it('always offers cash and wallet, whatever the gateway credentials are', async () => {
     const gateway = {
       name: 'jazzcash',
       method: PaymentMethod.JAZZCASH,
       isConfigured: () => false,
     } as unknown as PaymentGateway;
 
-    const methods = new ListGatewaysUseCase({
-      all: () => [gateway],
-    } as unknown as PaymentGatewayRegistry).execute();
+    const methods = await new ListGatewaysUseCase(
+      { all: () => [gateway] } as unknown as PaymentGatewayRegistry,
+      { findById: jest.fn() } as unknown as RestaurantRepository,
+    ).execute();
 
     expect(methods).toEqual([
       { name: 'cash', method: PaymentMethod.CASH_ON_DELIVERY, available: true },
       { name: 'wallet', method: PaymentMethod.WALLET, available: true },
       { name: 'jazzcash', method: PaymentMethod.JAZZCASH, available: false },
+      { name: 'qr', method: PaymentMethod.QR_TRANSFER, available: false },
     ]);
+  });
+
+  it('offers scan-to-pay only for a restaurant that has put up a QR code', async () => {
+    const restaurants = {
+      findById: jest.fn().mockImplementation((id: string) =>
+        Promise.resolve({
+          id,
+          paymentQrCodes:
+            id === 'with-qr'
+              ? [
+                  {
+                    provider: 'JAZZCASH',
+                    accountTitle: 'Chapli Kabab House',
+                    imageUrl: 'https://api.zassdelivery.pk/api/v1/uploads/payment-qr-codes/a.png',
+                  },
+                ]
+              : [],
+        }),
+      ),
+    } as unknown as RestaurantRepository;
+
+    const useCase = new ListGatewaysUseCase(
+      { all: () => [] } as unknown as PaymentGatewayRegistry,
+      restaurants,
+    );
+
+    const qr = (methods: Array<{ method: PaymentMethod; available: boolean }>) =>
+      methods.find((entry) => entry.method === PaymentMethod.QR_TRANSFER)?.available;
+
+    expect(qr(await useCase.execute('with-qr'))).toBe(true);
+    expect(qr(await useCase.execute('without-qr'))).toBe(false);
   });
 });
 

@@ -76,6 +76,7 @@ export class UploadsController {
             'menu-items',
             'avatars',
             'support-attachments',
+            'payment-qr-codes',
           ],
         },
       },

@@ -180,6 +180,9 @@ enum PaymentMethod {
   JAZZCASH
   EASYPAISA
   BANK_TRANSFER
+  /// Scanned the restaurant's or rider's own wallet/bank QR and paid them
+  /// directly. No gateway is involved, so the payee confirms receipt by hand.
+  QR_TRANSFER
 
   @@map("payment_method")
 }
@@ -807,8 +810,10 @@ model Restaurant {
   slug        String  @unique @db.VarChar(160)
   description String? @db.VarChar(1000)
 
-  logoUrl  String? @map("logo_url") @db.VarChar(500)
-  coverUrl String? @map("cover_url") @db.VarChar(500)
+  logoUrl        String? @map("logo_url") @db.VarChar(500)
+  coverUrl       String? @map("cover_url") @db.VarChar(500)
+  /// Customer-facing QR destinations for scan-to-pay. See payment-qr-code.dto.ts.
+  paymentQrCodes Json?   @map("payment_qr_codes")
 
   phone String  @db.VarChar(20)
   email String? @db.VarChar(160)
@@ -1142,6 +1147,8 @@ model Driver {
   payoutBankName      String? @map("payout_bank_name") @db.VarChar(120)
   payoutAccountTitle  String? @map("payout_account_title") @db.VarChar(120)
   payoutAccountNumber String? @map("payout_account_number") @db.VarChar(40)
+  /// Customer-facing QR destinations used when a rider receives payment.
+  paymentQrCodes      Json?   @map("payment_qr_codes")
 
   verifiedAt DateTime? @map("verified_at") @db.Timestamptz(3)
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)

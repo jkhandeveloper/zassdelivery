@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { OrdersModule } from '../orders/orders.module';
+import { RestaurantsModule } from '../restaurants/restaurants.module';
 import { FailPaymentAdminUseCase } from './application/use-cases/admin.use-cases';
 import {
   CancelCheckoutUseCase,
@@ -14,6 +15,10 @@ import {
   ListInvoicesUseCase,
 } from './application/use-cases/invoice.use-cases';
 import { RefundPaymentUseCase } from './application/use-cases/refund.use-cases';
+import {
+  GetOrderPaymentQrUseCase,
+  MarkPaymentReceivedUseCase,
+} from './application/use-cases/scan-to-pay.use-cases';
 import { SettlementService } from './application/use-cases/settlement.service';
 import {
   LedgerSummaryUseCase,
@@ -49,7 +54,8 @@ import { PaymentsController } from './payments.controller';
 @Module({
   // OrdersModule supplies OrderRepository: a payment exists to release an
   // order, and an invoice is an order seen from the money's side.
-  imports: [OrdersModule],
+  // RestaurantsModule answers whether a restaurant takes scan-to-pay.
+  imports: [OrdersModule, RestaurantsModule],
   controllers: [PaymentsController, PaymentWebhooksController, PaymentManagementController],
   providers: [
     // Gateway adapters are concrete because the registry composes them by name;
@@ -64,6 +70,8 @@ import { PaymentsController } from './payments.controller';
     ListGatewaysUseCase,
     StartCheckoutUseCase,
     CancelCheckoutUseCase,
+    GetOrderPaymentQrUseCase,
+    MarkPaymentReceivedUseCase,
 
     VerifyPaymentUseCase,
     GetPaymentUseCase,

@@ -197,6 +197,17 @@ export class PrismaRestaurantRepository extends RestaurantRepository {
     });
   }
 
+  async setPaymentQrCodes(
+    id: string,
+    codes: Prisma.InputJsonArray,
+  ): Promise<RestaurantWithRelations> {
+    return this.prisma.restaurant.update({
+      where: { id },
+      data: { paymentQrCodes: codes },
+      include: RELATIONS,
+    });
+  }
+
   // ── Opening hours ──
 
   async findHours(restaurantId: string): Promise<RestaurantHour[]> {
