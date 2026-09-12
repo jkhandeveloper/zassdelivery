@@ -57,6 +57,10 @@ const PERMISSION_MATRIX: Record<string, string[]> = {
   /// Rider withdrawals. Separate from `payments` so a dispatcher can work the
   /// board without also being able to move riders' money out of the platform.
   payouts: ['read', 'approve'],
+  /// Vendor subscriptions. `manage` is the one that moves money: confirming a
+  /// vendor's transfer, writing an invoice off, or putting a vendor on a
+  /// negotiated rate. Reading the queue is the far commoner need.
+  billing: ['read', 'manage'],
   /// Campaigns. Composing one and sending it are separate capabilities: an
   /// operator can draft a promotion without being able to put it in front of
   /// every customer on the platform.
@@ -1347,6 +1351,27 @@ async function seedContent(): Promise<void> {
       group: 'payments',
       isPublic: true,
       description: 'Largest order a rider is asked to collect in cash, in PKR.',
+    },
+    {
+      key: 'billing.vendor_monthly_fee',
+      value: '2000',
+      valueType: SettingValueType.NUMBER,
+      group: 'billing',
+      isPublic: false,
+      description:
+        'Standard monthly platform fee a vendor pays, in PKR. A vendor on a ' +
+        'negotiated rate carries their own amount on the subscription instead.',
+    },
+    {
+      key: 'billing.payment_qr_codes',
+      value: '[]',
+      valueType: SettingValueType.JSON,
+      group: 'billing',
+      isPublic: false,
+      description:
+        "The platform's own JazzCash, Easypaisa and bank QR codes, which vendors " +
+        'transfer their monthly fee to. Same shape as a restaurant’s scan-to-pay ' +
+        'list; an empty list means no vendor can pay until one is added.',
     },
     {
       key: 'dispatch.offer_timeout_seconds',

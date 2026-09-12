@@ -43,6 +43,9 @@ const ENTITY_BY_SEGMENT: Record<string, string> = {
   'order-management': 'Order',
   'rider-management': 'Rider',
   'payment-management': 'Payment',
+  // Confirming a vendor's transfer, waiving a month or changing their rate all
+  // act on an invoice, which is the record a dispute is argued over.
+  'billing-management': 'SubscriptionInvoice',
   'notification-management': 'Broadcast',
   coupons: 'Coupon',
   banners: 'Banner',

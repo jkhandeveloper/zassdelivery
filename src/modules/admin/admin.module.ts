@@ -123,6 +123,9 @@ import { AuditLogController, SupportController } from './support.controller';
     // declared, so the reach is global while the ownership stays local.
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
-  exports: [AuditLogRepository],
+  // SettingRepository goes out because the platform's configurable numbers are
+  // read well outside this module — billing resolves a vendor's monthly fee
+  // from it, and reading a setting is not a reason to duplicate the table.
+  exports: [AuditLogRepository, SettingRepository],
 })
 export class AdminModule {}

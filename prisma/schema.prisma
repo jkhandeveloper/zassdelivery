@@ -555,6 +555,9 @@ model User {
   driverDocumentsReviewed DriverDocument[]         @relation("DriverDocumentReviewer")
   assignmentsDispatched   DeliveryAssignment[]     @relation("AssignmentDispatcher")
   payoutsProcessed        PayoutRequest[]          @relation("PayoutProcessor")
+  subscriptions           VendorSubscription[]     @relation("SubscriptionOwner")
+  invoicesSubmitted       SubscriptionInvoice[]    @relation("InvoiceSubmitter")
+  invoicesConfirmed       SubscriptionInvoice[]    @relation("InvoiceConfirmer")
 
   @@index([role, status])
   @@index([status, createdAt])
@@ -879,6 +882,8 @@ model Restaurant {
   /// through the Prisma client, only through raw SQL in the search repository.
   searchVector Unsupported("tsvector")?       @map("search_vector")
   carts        Cart[]
+  subscription VendorSubscription?
+  invoices     SubscriptionInvoice[]
 
   @@index([cityId, status])
   @@index([zoneId, status])
@@ -2237,4 +2242,155 @@ model CartItemAddOn {
 
   @@unique([cartItemId, addOnId])
   @@map("cart_item_add_ons")
+}
+
+// ═════════════════════════════════════════════════════════════
+// VENDOR SUBSCRIPTIONS
+// ═════════════════════════════════════════════════════════════
+
+enum SubscriptionStatus {
+  /// The free first month. Nothing is owed yet.
+  TRIALING
+  /// Paid up; the current period is covered.
+  ACTIVE
+  /// The due date passed with the invoice unpaid. Still trading, inside grace.
+  PAST_DUE
+  /// Grace ran out and the listing has been taken down until the invoice is paid.
+  SUSPENDED
+  /// The vendor has left the platform. No further invoices are issued.
+  CANCELLED
+
+  @@map("subscription_status")
+}
+
+enum SubscriptionInvoiceStatus {
+  /// Issued and awaiting payment.
+  OPEN
+  /// The vendor says they have transferred; an administrator has yet to agree.
+  PENDING_REVIEW
+  PAID
+  /// Waived or written off. Closes the period without money changing hands.
+  VOID
+
+  @@map("subscription_invoice_status")
+}
+
+/// One vendor's standing agreement to pay the monthly platform fee.
+///
+/// One per restaurant rather than per owner: an owner with two listings runs
+/// two businesses and pays for each, and suspending one for non-payment must
+/// not take the other down with it.
+model VendorSubscription {
+  id           String @id @default(cuid())
+  restaurantId String @unique @map("restaurant_id")
+  ownerId      String @map("owner_id")
+
+  status SubscriptionStatus @default(TRIALING)
+
+  /// This vendor's negotiated rate. Null means the platform default, read from
+  /// the `billing.vendor_monthly_fee` setting — so a price change reaches every
+  /// vendor on the standard rate without rewriting a single row here.
+  monthlyFee Decimal? @map("monthly_fee") @db.Decimal(10, 2)
+  currency   String   @default("PKR") @db.VarChar(3)
+
+  /// The period the vendor is currently covered for. `currentPeriodEnd` is the
+  /// next due date. Cycles are a fixed 30 days, so the date walks through the
+  /// calendar rather than landing on the 1st of the month.
+  currentPeriodStart DateTime @map("current_period_start") @db.Timestamptz(3)
+  currentPeriodEnd   DateTime @map("current_period_end") @db.Timestamptz(3)
+
+  /// When the free first month runs out.
+  trialEndsAt DateTime? @map("trial_ends_at") @db.Timestamptz(3)
+
+  lastPaidAt  DateTime? @map("last_paid_at") @db.Timestamptz(3)
+  suspendedAt DateTime? @map("suspended_at") @db.Timestamptz(3)
+
+  /// Set when *billing* took the listing down, along with what it was before.
+  /// An administrator who suspended a restaurant for its own reasons must not
+  /// have that decision quietly undone by a later payment, so a reinstatement
+  /// only happens where these say billing was the one that intervened.
+  suspendedByBilling     Boolean           @default(false) @map("suspended_by_billing")
+  statusBeforeSuspension RestaurantStatus? @map("status_before_suspension")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  restaurant Restaurant            @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  owner      User                  @relation("SubscriptionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  invoices   SubscriptionInvoice[]
+
+  @@index([status, currentPeriodEnd])
+  @@index([ownerId])
+  @@map("vendor_subscriptions")
+}
+
+/// One month's charge, and the paper trail for how it was settled.
+///
+/// There is no gateway behind these: the vendor transfers to the platform's own
+/// JazzCash, Easypaisa or bank QR and quotes the transaction ID, and an
+/// administrator confirms it arrived. The same shape as a customer paying a
+/// restaurant by QR, for the same reason — nobody but the payee can say the
+/// money landed, and "I paid" is exactly the claim the step exists to check.
+model SubscriptionInvoice {
+  id             String @id @default(cuid())
+  subscriptionId String @map("subscription_id")
+  /// Denormalised so the admin queue can filter by listing without a join.
+  restaurantId   String @map("restaurant_id")
+
+  /// Human reference, e.g. "SUB-260912-0001". Quoted in every reminder.
+  invoiceNumber String @unique @map("invoice_number") @db.VarChar(40)
+
+  status   SubscriptionInvoiceStatus @default(OPEN)
+  amount   Decimal                   @db.Decimal(10, 2)
+  currency String                    @default("PKR") @db.VarChar(3)
+
+  /// What this invoice buys. `dueAt` equals `periodStart`: the fee is paid up
+  /// front, which is why the first month being free is what gets a vendor
+  /// trading before they are asked for anything.
+  periodStart DateTime @map("period_start") @db.Timestamptz(3)
+  periodEnd   DateTime @map("period_end") @db.Timestamptz(3)
+  dueAt       DateTime @map("due_at") @db.Timestamptz(3)
+  /// When an unpaid invoice takes the listing down: `dueAt` plus the grace days.
+  blockAt     DateTime @map("block_at") @db.Timestamptz(3)
+
+  /// The free first month, recorded rather than skipped so a vendor's billing
+  /// history reads continuously from the day they went live.
+  isTrial Boolean @default(false) @map("is_trial")
+
+  // ── What the vendor says ──
+  submittedAt   DateTime? @map("submitted_at") @db.Timestamptz(3)
+  submittedById String?   @map("submitted_by_id")
+  /// JAZZCASH, EASYPAISA, BANK or OTHER. See payment-qr-code.dto.ts.
+  channel       String?   @db.VarChar(20)
+  /// The transfer's TID. Unique, because one transfer settles one invoice.
+  reference     String?   @unique @db.VarChar(120)
+  proofImageUrl String?   @map("proof_image_url") @db.VarChar(500)
+
+  // ── What an administrator decided ──
+  paidAt          DateTime? @map("paid_at") @db.Timestamptz(3)
+  confirmedById   String?   @map("confirmed_by_id")
+  rejectedAt      DateTime? @map("rejected_at") @db.Timestamptz(3)
+  rejectionReason String?   @map("rejection_reason") @db.VarChar(500)
+  /// Why an administrator wrote this one off.
+  voidReason      String?   @map("void_reason") @db.VarChar(500)
+
+  /// The smallest lead-time reminder already sent for this invoice, in days
+  /// before `dueAt`. The sweep runs daily and must not send the same warning
+  /// twice; one integer is cheaper than a table of sent messages.
+  lastReminderDay Int? @map("last_reminder_day")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  subscription VendorSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  submittedBy  User?              @relation("InvoiceSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  confirmedBy  User?              @relation("InvoiceConfirmer", fields: [confirmedById], references: [id], onDelete: SetNull)
+
+  @@index([subscriptionId, createdAt])
+  @@index([restaurantId, status])
+  /// The sweep's two working queries: what to remind about, what to take down.
+  @@index([status, dueAt])
+  @@index([status, blockAt])
+  @@map("subscription_invoices")
 }

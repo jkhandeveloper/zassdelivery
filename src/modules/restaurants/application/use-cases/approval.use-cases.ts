@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { RestaurantStatus } from '@prisma/client';
 
 import {
@@ -7,6 +8,7 @@ import {
 } from '@/common/exceptions/domain.exception';
 import type { AuthenticatedUser } from '@/common/interfaces/authenticated-user.interface';
 
+import { RestaurantEvents } from '../../domain/events/restaurant.events';
 import { RestaurantRepository } from '../../domain/repositories/restaurant.repository';
 import { toRestaurantDto, type RestaurantAdminDto } from '../dto/restaurant-response.dto';
 import type {
@@ -48,7 +50,10 @@ function assertTransition(from: RestaurantStatus, to: RestaurantStatus): void {
 
 @Injectable()
 export class ApproveRestaurantUseCase {
-  constructor(private readonly restaurants: RestaurantRepository) {}
+  constructor(
+    private readonly restaurants: RestaurantRepository,
+    private readonly events: EventEmitter2,
+  ) {}
 
   async execute(id: string, reviewerId: string): Promise<RestaurantAdminDto> {
     const existing = await this.restaurants.findById(id, true);
@@ -71,6 +76,16 @@ export class ApproveRestaurantUseCase {
 
     const updated = await this.restaurants.setStatus(id, RestaurantStatus.ACTIVE, {
       approvedById: reviewerId,
+    });
+
+    // Announced rather than called: billing opens the vendor's free first month
+    // from here, and a direct call would make the two modules a cycle. Emitted
+    // after the status has committed, and no listener can fail the approval.
+    this.events.emit(RestaurantEvents.approved, {
+      restaurantId: updated.id,
+      restaurantName: updated.name,
+      ownerId: updated.ownerId,
+      approvedAt: (updated.approvedAt ?? new Date()).toISOString(),
     });
 
     return toRestaurantDto(updated, { includePrivate: true }) as RestaurantAdminDto;
