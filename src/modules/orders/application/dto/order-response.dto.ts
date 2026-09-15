@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ActorType, OrderStatus, OrderType, PaymentMethod, PaymentStatus } from '@prisma/client';
+import {
+  ActorType,
+  OrderStatus,
+  OrderType,
+  PaymentMethod,
+  PaymentStatus,
+  TransactionStatus,
+  TransactionType,
+} from '@prisma/client';
 
 import { OrderStateMachine } from '../../domain/services/order-state-machine';
 import type { OrderWithDetails } from '../../domain/repositories/order.repository';
@@ -78,6 +86,11 @@ export class OrderDto {
 
   @ApiProperty({ enum: PaymentMethod }) paymentMethod!: PaymentMethod;
   @ApiProperty({ enum: PaymentStatus }) paymentStatus!: PaymentStatus;
+  @ApiProperty({
+    example: 0,
+    description: 'Already returned to the customer by the restaurant.',
+  })
+  refundedAmount!: number;
   @ApiPropertyOptional({ nullable: true, example: 'ZASS100' }) couponCode!: string | null;
 
   @ApiProperty({ example: 'House 14, Street 3, Gulshan Colony' }) deliveryAddress!: string;
@@ -195,6 +208,12 @@ export function toOrderDto(order: OrderWithDetails, options: OrderDtoOptions = {
     },
     paymentMethod: order.paymentMethod,
     paymentStatus: order.paymentStatus,
+    refundedAmount: order.transactions
+      .filter(
+        (entry) =>
+          entry.type === TransactionType.REFUND && entry.status === TransactionStatus.SUCCESS,
+      )
+      .reduce((sum, entry) => sum + Number(entry.amount), 0),
     couponCode: order.couponCode,
     deliveryAddress: order.deliveryLine1 ?? '',
     deliveryLandmark: order.deliveryLandmark,

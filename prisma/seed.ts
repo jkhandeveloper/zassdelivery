@@ -1241,14 +1241,6 @@ async function seedContent(): Promise<void> {
    */
   const settings = [
     {
-      key: 'platform.service_fee_percentage',
-      value: '5',
-      valueType: SettingValueType.NUMBER,
-      group: 'pricing',
-      isPublic: true,
-      description: 'Service fee applied to the order subtotal.',
-    },
-    {
       key: 'platform.tax_percentage',
       value: '0',
       valueType: SettingValueType.NUMBER,

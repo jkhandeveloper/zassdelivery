@@ -14,7 +14,6 @@ import {
   InvoiceService,
   ListInvoicesUseCase,
 } from './application/use-cases/invoice.use-cases';
-import { RefundPaymentUseCase } from './application/use-cases/refund.use-cases';
 import {
   GetOrderPaymentQrUseCase,
   MarkPaymentReceivedUseCase,
@@ -83,8 +82,6 @@ import { PaymentsController } from './payments.controller';
     HandleWebhookUseCase,
     ReplayWebhookUseCase,
     ListWebhookEventsUseCase,
-
-    RefundPaymentUseCase,
 
     GetInvoiceUseCase,
     ListInvoicesUseCase,

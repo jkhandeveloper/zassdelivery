@@ -92,20 +92,6 @@ export interface SettleManualTransferInput {
   description: string;
 }
 
-export interface RecordRefundInput {
-  paymentId: string;
-  orderId: string;
-  userId: string;
-  amount: number;
-  reason: string;
-  /** Where the money went: back to the card/wallet provider, or to our wallet. */
-  destination: 'GATEWAY' | 'WALLET';
-  gatewayRefundId: string | null;
-  /** PENDING while a gateway is still processing it. */
-  status: TransactionStatus;
-  actorId: string;
-}
-
 export interface ListTransactionsFilter {
   page: number;
   limit: number;
@@ -176,9 +162,6 @@ export abstract class PaymentRepository {
   abstract settleManualTransfer(input: SettleManualTransferInput): Promise<PaymentWithContext>;
 
   abstract totalRefunded(paymentId: string): Promise<number>;
-
-  /** Records a refund: ledger entry, payment totals and — for wallet refunds — the credit. */
-  abstract recordRefund(input: RecordRefundInput): Promise<Transaction>;
 
   /** Online attempts whose checkout window has closed. */
   abstract findExpired(now: Date, limit: number): Promise<PaymentWithContext[]>;

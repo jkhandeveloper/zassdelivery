@@ -35,7 +35,6 @@ const toBoolean = ({ value }: { value: unknown }): unknown => {
 /** Payment methods a customer may choose at checkout. */
 const CUSTOMER_PAYMENT_METHODS = [
   PaymentMethod.CASH_ON_DELIVERY,
-  PaymentMethod.WALLET,
   PaymentMethod.JAZZCASH,
   PaymentMethod.EASYPAISA,
   PaymentMethod.QR_TRANSFER,
@@ -46,7 +45,7 @@ export class PlaceOrderDto {
     enum: CUSTOMER_PAYMENT_METHODS,
     default: PaymentMethod.CASH_ON_DELIVERY,
     description:
-      'Cash and wallet settle here and the order goes straight to the ' +
+      'Cash settles here and the order goes straight to the ' +
       'restaurant. JazzCash and Easypaisa hold the order in PENDING_PAYMENT ' +
       'until the money lands — start the payment with ' +
       'POST /payments/orders/{orderId}/checkout and send the customer to the gateway. ' +

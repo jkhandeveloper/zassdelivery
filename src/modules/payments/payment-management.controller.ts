@@ -24,10 +24,8 @@ import {
   ListPaymentsQueryDto,
   ListTransactionsQueryDto,
   ListWebhookEventsQueryDto,
-  RefundPaymentDto,
 } from './application/dto/payment.dto';
 import { GetInvoiceUseCase, ListInvoicesUseCase } from './application/use-cases/invoice.use-cases';
-import { RefundPaymentUseCase, type RefundOutcome } from './application/use-cases/refund.use-cases';
 import {
   LedgerSummaryUseCase,
   ListTransactionsUseCase,
@@ -48,8 +46,9 @@ import { FailPaymentAdminUseCase } from './application/use-cases/admin.use-cases
  *
  * Permission-guarded rather than role-guarded, and split deliberately:
  * `payments.read` is enough to investigate a customer's complaint, while
- * `payments.refund` is what it takes to actually move money back. A support
- * agent needs the first far more often than the second.
+ * `payments.refund` is what it takes to change a payment's outcome by hand.
+ * Refunds themselves are not here: the customer paid the restaurant directly,
+ * so the restaurant returns the money and records it from the vendor panel.
  */
 @ApiTags('Payment Management')
 @ApiBearerAuth('access-token')
@@ -60,7 +59,6 @@ import { FailPaymentAdminUseCase } from './application/use-cases/admin.use-cases
 export class PaymentManagementController {
   constructor(
     private readonly listPayments: ListPaymentsUseCase,
-    private readonly refund: RefundPaymentUseCase,
     private readonly settleCash: SettleCashPaymentUseCase,
     private readonly failPayment: FailPaymentAdminUseCase,
     private readonly expire: ExpirePaymentsUseCase,
@@ -102,32 +100,6 @@ export class PaymentManagementController {
       method: PaymentMethod.CASH_ON_DELIVERY,
       status: PaymentStatus.PENDING,
     });
-  }
-
-  @Post('payments/:id/refund')
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions('payments.refund')
-  @ApiParam({ name: 'id' })
-  @ApiOperation({
-    summary: 'Refund a payment',
-    description:
-      'Additive rather than a reversal: the original payment is never ' +
-      'rewritten and the correction lives in the ledger. Partial refunds ' +
-      'accumulate and can never exceed what was taken. `destination=SOURCE` ' +
-      'returns the money the way it arrived and falls back to the wallet if the ' +
-      'gateway refuses — the response always says which way it actually went.',
-  })
-  @ApiResponse({ status: 200, description: 'Refund issued.' })
-  @ApiResponse({
-    status: 422,
-    description: 'Never collected, already fully refunded, or the amount is too large.',
-  })
-  issueRefund(
-    @Param('id') id: string,
-    @Body() dto: RefundPaymentDto,
-    @CurrentUser() actor: AuthenticatedUser,
-  ): Promise<RefundOutcome> {
-    return this.refund.execute(id, dto, actor);
   }
 
   @Post('payments/:id/mark-collected')

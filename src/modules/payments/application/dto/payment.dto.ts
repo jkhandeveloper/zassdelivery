@@ -7,18 +7,7 @@ import {
   WebhookStatus,
 } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import {
-  IsDate,
-  IsEnum,
-  IsIn,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Max,
-  MaxLength,
-  Min,
-  MinLength,
-} from 'class-validator';
+import { IsDate, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
 import { PAYMENT_QR_PROVIDERS, type PaymentQrProvider } from '@/common/dto/payment-qr-code.dto';
@@ -85,39 +74,6 @@ export class MarkPaymentReceivedDto {
   @MaxLength(120)
   @Transform(trim)
   reference?: string;
-}
-
-export class RefundPaymentDto {
-  @ApiPropertyOptional({
-    description: 'Amount in PKR. Omit to refund everything not already returned.',
-    example: 250,
-    minimum: 1,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(1)
-  @Max(1000000)
-  amount?: number;
-
-  @ApiProperty({ example: 'Items missing from the delivered order.', maxLength: 300 })
-  @IsString()
-  @MinLength(5)
-  @MaxLength(300)
-  @Transform(trim)
-  reason!: string;
-
-  @ApiPropertyOptional({
-    enum: ['SOURCE', 'WALLET'],
-    default: 'SOURCE',
-    description:
-      'SOURCE returns the money the way it arrived, falling back to the wallet ' +
-      'when the gateway cannot take it. WALLET always credits the in-app wallet, ' +
-      'which is instant but keeps the money on the platform.',
-  })
-  @IsOptional()
-  @IsIn(['SOURCE', 'WALLET'])
-  destination?: 'SOURCE' | 'WALLET';
 }
 
 export class MarkPaymentPaidDto {

@@ -464,52 +464,29 @@ export class PrismaOrderRepository extends OrderRepository {
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUniqueOrThrow({ where: { id: input.orderId } });
 
-      const wallet = await tx.wallet.upsert({
-        where: { userId: input.userId },
-        update: {},
-        create: { userId: input.userId },
-      });
-
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: { increment: input.amount } },
-      });
-
-      await tx.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          type: WalletTransactionType.CREDIT,
-          reason: WalletTransactionReason.ORDER_REFUND,
-          amount: input.amount,
-          balanceAfter: Number(wallet.balance) + input.amount,
-          referenceType: 'order',
-          referenceId: input.orderId,
-          description: `Refund for ${order.orderNumber}: ${input.reason}`,
-        },
-      });
-
-      if (input.paymentId !== null) {
-        await tx.payment.update({
-          where: { id: input.paymentId },
-          data: { refundedAmount: { increment: input.amount } },
-        });
-      }
-
       const refundedSoFar = await tx.transaction.aggregate({
         where: { orderId: input.orderId, type: TransactionType.REFUND },
         _sum: { amount: true },
       });
 
       const totalAfter = Number(refundedSoFar._sum.amount ?? 0) + input.amount;
+      const paymentStatus =
+        totalAfter >= Number(order.totalAmount)
+          ? PaymentStatus.REFUNDED
+          : PaymentStatus.PARTIALLY_REFUNDED;
+
+      // No wallet credit: the restaurant returned the money itself, outside the
+      // platform. This only records that it happened.
+      if (input.paymentId !== null) {
+        await tx.payment.update({
+          where: { id: input.paymentId },
+          data: { refundedAmount: { increment: input.amount }, status: paymentStatus },
+        });
+      }
 
       await tx.order.update({
         where: { id: input.orderId },
-        data: {
-          paymentStatus:
-            totalAfter >= Number(order.totalAmount)
-              ? PaymentStatus.REFUNDED
-              : PaymentStatus.PARTIALLY_REFUNDED,
-        },
+        data: { paymentStatus },
       });
 
       return tx.transaction.create({
@@ -524,6 +501,7 @@ export class PrismaOrderRepository extends OrderRepository {
           // which the idempotency constraint on `reference` requires.
           reference: `TXN-${order.orderNumber}-REFUND-${Date.now()}`,
           description: input.reason,
+          metadata: { returnedBy: 'RESTAURANT', actorId: input.actorId },
           processedAt: new Date(),
         },
       });

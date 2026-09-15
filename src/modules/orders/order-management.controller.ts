@@ -235,17 +235,18 @@ export class OrderManagementController {
 
   @Post(':id/refund')
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('payments.refund')
   @ApiParam({ name: 'id' })
   @ApiOperation({
-    summary: 'Refund an order',
+    summary: 'Record a refund the restaurant has made',
     description:
-      'Credits the customer’s wallet and posts a ledger entry. Additive rather ' +
-      'than a status change: a delivered order stays delivered and the ' +
-      'correction lives in the transaction trail. Partial refunds accumulate ' +
-      'and can never exceed what was paid.',
+      'The customer paid the restaurant directly, so the restaurant returns the ' +
+      'money itself and records it here. Only the restaurant’s owner or staff may ' +
+      'call this. No money moves on the platform: it posts a ledger entry and ' +
+      'updates the payment status. Partial refunds accumulate and can never ' +
+      'exceed what was paid.',
   })
-  @ApiResponse({ status: 200, description: 'Refund issued.' })
+  @ApiResponse({ status: 200, description: 'Refund recorded.' })
+  @ApiResponse({ status: 403, description: 'Not the restaurant that took the order.' })
   @ApiResponse({ status: 422, description: 'Unpaid, already fully refunded, or amount too large.' })
   refundOrder(
     @Param('id') id: string,

@@ -7,8 +7,6 @@ import {
   Prisma,
   TransactionStatus,
   TransactionType,
-  WalletTransactionReason,
-  WalletTransactionType,
   type Transaction,
 } from '@prisma/client';
 
@@ -28,7 +26,6 @@ import {
   type ListPaymentsFilter,
   type ListTransactionsFilter,
   type PaymentWithContext,
-  type RecordRefundInput,
   type SettleInput,
   type SettleManualTransferInput,
 } from '../../domain/repositories/payment.repository';
@@ -482,76 +479,6 @@ export class PrismaPaymentRepository extends PaymentRepository {
     });
 
     return Number(result._sum.amount ?? 0);
-  }
-
-  async recordRefund(input: RecordRefundInput): Promise<Transaction> {
-    return this.prisma.$transaction(async (tx) => {
-      const payment = await tx.payment.findUniqueOrThrow({ where: { id: input.paymentId } });
-
-      await tx.payment.update({
-        where: { id: input.paymentId },
-        data: { refundedAmount: { increment: input.amount } },
-      });
-
-      const refundedInTotal = Number(payment.refundedAmount) + input.amount;
-      const status = PaymentStateMachine.statusAfterRefund(Number(payment.amount), refundedInTotal);
-
-      await tx.payment.update({ where: { id: input.paymentId }, data: { status } });
-      await tx.order.update({
-        where: { id: input.orderId },
-        data: { paymentStatus: status },
-      });
-
-      // A refund to our own wallet is money the customer can spend immediately,
-      // so it moves here. A refund to the gateway moves on the provider's
-      // timetable and only the ledger entry is written.
-      if (input.destination === 'WALLET') {
-        const wallet = await tx.wallet.upsert({
-          where: { userId: input.userId },
-          update: {},
-          create: { userId: input.userId },
-        });
-
-        await tx.wallet.update({
-          where: { id: wallet.id },
-          data: { balance: { increment: input.amount } },
-        });
-
-        await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            type: WalletTransactionType.CREDIT,
-            reason: WalletTransactionReason.ORDER_REFUND,
-            amount: input.amount,
-            balanceAfter: Number(wallet.balance) + input.amount,
-            referenceType: 'payment',
-            referenceId: input.paymentId,
-            description: `Refund for ${payment.reference ?? input.paymentId}: ${input.reason}`,
-          },
-        });
-      }
-
-      return tx.transaction.create({
-        data: {
-          paymentId: input.paymentId,
-          orderId: input.orderId,
-          userId: input.userId,
-          type: TransactionType.REFUND,
-          status: input.status,
-          amount: input.amount,
-          // The timestamp keeps partial refunds distinct under the unique
-          // constraint that makes replays safe.
-          reference: `TXN-${payment.reference ?? input.paymentId}-REFUND-${Date.now()}`,
-          description: input.reason,
-          metadata: {
-            destination: input.destination,
-            gatewayRefundId: input.gatewayRefundId,
-            issuedBy: input.actorId,
-          },
-          processedAt: input.status === TransactionStatus.SUCCESS ? new Date() : null,
-        },
-      });
-    });
   }
 
   async findExpired(now: Date, limit: number): Promise<PaymentWithContext[]> {

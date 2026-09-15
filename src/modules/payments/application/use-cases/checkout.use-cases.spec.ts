@@ -127,7 +127,6 @@ describe('ListGatewaysUseCase', () => {
 
     expect(methods).toEqual([
       { name: 'cash', method: PaymentMethod.CASH_ON_DELIVERY, available: true },
-      { name: 'wallet', method: PaymentMethod.WALLET, available: true },
       { name: 'jazzcash', method: PaymentMethod.JAZZCASH, available: false },
       { name: 'qr', method: PaymentMethod.QR_TRANSFER, available: false },
     ]);
@@ -303,11 +302,11 @@ describe('StartCheckoutUseCase — guards', () => {
     ).rejects.toThrow(ResourceNotFoundException);
   });
 
-  it('sends a wallet payer back to checkout, where the balance is actually debited', async () => {
+  it('refuses to pay from the wallet, which is no longer offered', async () => {
     const { useCase } = build({});
 
     await expect(
       useCase.execute('order-1', { method: PaymentMethod.WALLET }, CUSTOMER),
-    ).rejects.toThrow(/paymentMethod=WALLET/);
+    ).rejects.toThrow(/no longer offered/);
   });
 });

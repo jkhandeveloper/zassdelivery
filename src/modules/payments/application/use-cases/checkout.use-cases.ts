@@ -97,7 +97,6 @@ export class ListGatewaysUseCase {
 
     return [
       { name: 'cash', method: PaymentMethod.CASH_ON_DELIVERY, available: true },
-      { name: 'wallet', method: PaymentMethod.WALLET, available: true },
       ...online,
       {
         name: 'qr',
@@ -162,7 +161,7 @@ export class StartCheckoutUseCase {
 
     if (dto.method === PaymentMethod.WALLET) {
       throw new BusinessRuleViolationException(
-        'Wallet payments are taken at checkout. Place the order with paymentMethod=WALLET instead.',
+        'Paying from the wallet is no longer offered. Choose another payment method.',
       );
     }
 

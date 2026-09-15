@@ -157,7 +157,10 @@ export abstract class OrderRepository {
   abstract timeline(orderId: string): Promise<OrderStatusHistory[]>;
   abstract transactionsFor(orderId: string): Promise<Transaction[]>;
 
-  /** Records a refund: ledger entry, payment update and wallet credit. */
+  /**
+   * Records a refund the restaurant has already made: ledger entry, payment and
+   * order status. Moves no money — the platform never held it.
+   */
   abstract refund(input: RefundInput): Promise<Transaction>;
 
   abstract totalRefunded(orderId: string): Promise<number>;

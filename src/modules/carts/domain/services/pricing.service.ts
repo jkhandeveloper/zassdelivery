@@ -28,7 +28,6 @@ export interface PricingInput {
   baseDeliveryFee: number;
   /** Subtotal at or above which delivery is free. Null disables it. */
   freeDeliveryThreshold: number | null;
-  serviceFeePercentage: number;
   taxPercentage: number;
   tipAmount: number;
 }
@@ -37,6 +36,11 @@ export interface PricingBreakdown {
   subtotal: number;
   discountAmount: number;
   deliveryFee: number;
+  /**
+   * Always zero: the platform earns from the restaurants' monthly subscription,
+   * not from a charge on the customer. Kept because orders placed before the
+   * subscription still carry one, and the total constraint includes it.
+   */
   serviceFee: number;
   taxAmount: number;
   tipAmount: number;
@@ -97,12 +101,12 @@ export class PricingService {
       ? this.discountFor(coupon, subtotal, input.baseDeliveryFee, freeDeliveryReason)
       : 0;
 
-    // Fees are charged on the discounted basket, not the list price: billing a
-    // service fee on money the customer never paid is indefensible on a receipt.
+    // Tax is charged on the discounted basket, not the list price: taxing money
+    // the customer never paid is indefensible on a receipt.
     const discountedSubtotal = money(Math.max(0, subtotal - discountAmount));
 
-    const serviceFee = money((discountedSubtotal * input.serviceFeePercentage) / 100);
-    const taxAmount = money(((discountedSubtotal + serviceFee) * input.taxPercentage) / 100);
+    const serviceFee = 0;
+    const taxAmount = money((discountedSubtotal * input.taxPercentage) / 100);
     const tipAmount = money(input.tipAmount);
 
     const totalAmount = money(

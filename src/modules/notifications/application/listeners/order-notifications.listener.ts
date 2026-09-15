@@ -127,7 +127,7 @@ export class OrderNotificationsListener {
           {
             userId: event.customerId,
             title: `${event.restaurantName} could not take your order`,
-            body: `Order ${event.orderNumber} was rejected and anything you paid is being returned to your wallet.`,
+            body: `Order ${event.orderNumber} was rejected. If you already paid, ${event.restaurantName} will return your money.`,
             push: true,
           },
         ];
@@ -152,7 +152,7 @@ export class OrderNotificationsListener {
       {
         userId: event.customerId,
         title: `Order ${event.orderNumber} ${ended}`,
-        body: `Your order with ${event.restaurantName} ${ended}. Anything you paid goes back to your wallet.`,
+        body: `Your order with ${event.restaurantName} ${ended}. If you already paid, the restaurant will return your money.`,
         push: true,
       },
       {

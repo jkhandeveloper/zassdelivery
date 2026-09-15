@@ -426,7 +426,12 @@ export class RefundOrderUseCase {
   ) {}
 
   /**
-   * Returns money to the customer's wallet and posts the ledger entry.
+   * Records money the restaurant has handed back to the customer.
+   *
+   * The customer paid the restaurant directly — cash to the rider or a
+   * transfer to the kitchen's own QR — so the platform never held the money
+   * and has none to return. The restaurant sends it back itself, then records
+   * it here so the order, the customer and the ledger all show it.
    *
    * Refunds are additive rather than a status change: an order that was
    * delivered stays delivered, and the correction lives in the transaction
@@ -438,10 +443,12 @@ export class RefundOrderUseCase {
     amount: number | undefined,
     reason: string,
   ): Promise<{ message: string; refunded: number; totalRefunded: number }> {
-    const order = await this.access.load(orderId);
+    const { order, as } = await this.access.loadFor(orderId, actor);
 
-    if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.SUPER_ADMIN) {
-      throw new ForbiddenOperationException('Only staff may issue refunds.');
+    if (as !== ActorType.RESTAURANT) {
+      throw new ForbiddenOperationException(
+        'Refunds are made by the restaurant, which received the payment.',
+      );
     }
 
     // PARTIALLY_REFUNDED must stay refundable, or the remainder of a partial
@@ -492,7 +499,7 @@ export class RefundOrderUseCase {
     const totalRefunded = alreadyRefunded + requested;
 
     return {
-      message: `Rs. ${requested} refunded to the customer's wallet.`,
+      message: `Rs. ${requested} recorded as returned to the customer.`,
       refunded: requested,
       totalRefunded,
     };

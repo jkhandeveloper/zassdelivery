@@ -11,8 +11,7 @@ import {
 } from '../../domain/repositories/cart.repository';
 import type { CartDto, CartLineDto } from '../dto/cart-response.dto';
 
-/** Platform-wide fee settings, read from the Setting table. */
-const SETTING_SERVICE_FEE = 'platform.service_fee_percentage';
+/** Platform-wide tax setting, read from the Setting table. */
 const SETTING_TAX = 'platform.tax_percentage';
 
 /**
@@ -64,10 +63,7 @@ export class CartAssemblerService {
       });
     }
 
-    const [serviceFeePercentage, taxPercentage] = await Promise.all([
-      this.delivery.numericSetting(SETTING_SERVICE_FEE, 0),
-      this.delivery.numericSetting(SETTING_TAX, 0),
-    ]);
+    const taxPercentage = await this.delivery.numericSetting(SETTING_TAX, 0);
 
     const totals = this.pricing.calculate({
       lines,
@@ -87,7 +83,6 @@ export class CartAssemblerService {
       // food-only total until one is chosen.
       baseDeliveryFee: quote?.fee ?? 0,
       freeDeliveryThreshold: quote?.freeDeliveryThreshold ?? null,
-      serviceFeePercentage,
       taxPercentage,
       tipAmount: Number(cart.tipAmount),
     });
