@@ -13,6 +13,7 @@ import type { Server, Socket } from 'socket.io';
 
 import type { AuthenticatedUser } from '@/common/interfaces/authenticated-user.interface';
 import { haversineKm } from '@/common/utils/geo.util';
+import { OrderStateMachine } from '@/modules/orders/domain/services/order-state-machine';
 
 import { RealtimeService } from './application/realtime.service';
 import { ClientEvents, ServerEvents } from './domain/events';
@@ -343,7 +344,9 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       orderId: snapshot.id,
       orderNumber: snapshot.orderNumber,
       status: snapshot.status,
-      statusText: snapshot.status,
+      // The customer-facing wording, as every order:status event carries —
+      // not the enum, which clients would otherwise show verbatim ("PLACED").
+      statusText: OrderStateMachine.describe(snapshot.status),
       actor: null,
       at: snapshot.updatedAt.toISOString(),
       restaurantName: snapshot.restaurantName,
