@@ -53,7 +53,6 @@ export class DashboardUseCase {
       queues.ordersAwaitingRestaurant +
       queues.ordersAwaitingRider +
       queues.openTickets +
-      queues.pendingWithdrawals +
       queues.unresolvedWebhooks;
 
     return { totals, queues, operations, trend, actionsRequired, generatedAt: now };

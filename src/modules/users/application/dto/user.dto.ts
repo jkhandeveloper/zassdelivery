@@ -85,7 +85,7 @@ export class CreateUserDto {
   role!: UserRole;
 
   @ApiPropertyOptional({
-    description: 'Required when role is VENDOR_STAFF: the restaurant this account works for.',
+    description: 'Required when role is VENDOR_STAFF: the business this account works for.',
     example: 'cl9restaurant0000id',
   })
   @IsOptional()

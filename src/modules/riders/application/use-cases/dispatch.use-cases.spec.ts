@@ -42,6 +42,7 @@ function order(overrides: Record<string, unknown> = {}): OrderWithDetails {
     driverId: null,
     zoneId: 'zone-pabbi',
     distanceKm: 2.5,
+    deliveryFee: 69,
     restaurant: { id: 'restaurant-1', name: 'Chapli Kabab House', ...PICKUP },
     ...overrides,
   } as unknown as OrderWithDetails;
@@ -108,9 +109,6 @@ function build(options: {
       searchRadiusKm: 8,
       locationFreshnessMinutes: 10,
     }),
-    earningRates: jest
-      .fn()
-      .mockResolvedValue({ baseFare: 60, perKm: 18, tipSharePercentage: 100, minimumFare: 80 }),
   } as unknown as jest.Mocked<RiderSettingsService>;
 
   const realtime = {
@@ -160,14 +158,13 @@ describe('AssignOrderUseCase — automatic dispatch', () => {
     );
   });
 
-  it('quotes the fare the rider will earn, excluding any tip', async () => {
+  it('quotes the order’s delivery fee, excluding any tip', async () => {
     const { useCase, assignments } = build({});
 
     await useCase.execute('order-1', {}, DISPATCHER);
 
-    // 60 base + 2.5 km at 18/km.
     expect(assignments.offer).toHaveBeenCalledWith(
-      expect.objectContaining({ estimatedEarning: 105 }),
+      expect.objectContaining({ estimatedEarning: 69 }),
     );
   });
 
@@ -180,7 +177,7 @@ describe('AssignOrderUseCase — automatic dispatch', () => {
     expect(assignments.offer).not.toHaveBeenCalled();
   });
 
-  it('starts dispatching as soon as the restaurant has confirmed', async () => {
+  it('starts dispatching as soon as the business has confirmed', async () => {
     const { useCase, assignments } = build({
       loadedOrder: order({ status: OrderStatus.CONFIRMED }),
     });
@@ -190,11 +187,11 @@ describe('AssignOrderUseCase — automatic dispatch', () => {
     expect(assignments.offer).toHaveBeenCalled();
   });
 
-  it('refuses to dispatch an order the restaurant has not accepted yet', async () => {
+  it('refuses to dispatch an order the business has not accepted yet', async () => {
     const { useCase } = build({ loadedOrder: order({ status: OrderStatus.PLACED }) });
 
     await expect(useCase.execute('order-1', {}, DISPATCHER)).rejects.toThrow(
-      /must be confirmed by the restaurant first/,
+      /must be confirmed by the business first/,
     );
   });
 

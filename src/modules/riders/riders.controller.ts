@@ -17,7 +17,6 @@ import { ApiPaginatedResponse } from '@/common/decorators/api-paginated-response
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { SetPaymentQrCodesDto } from '@/common/dto/payment-qr-code.dto';
-import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
 import { ApiErrorResponseDto } from '@/common/dto/api-response.dto';
 import type { AuthenticatedUser } from '@/common/interfaces/authenticated-user.interface';
 import type { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
@@ -28,20 +27,20 @@ import {
   DeliveryCompletedDto,
   EarningDto,
   EarningsSummaryDto,
-  PayoutRequestDto,
+  RestaurantBalanceDto,
   RiderDocumentDto,
   RiderDto,
-  RiderWalletDto,
-  WalletTransactionDto,
+  RiderLedgerEntryDto,
+  RiderSettlementDto,
 } from './application/dto/rider-response.dto';
 import {
   ConfirmDeliveryDto,
   ListAssignmentsQueryDto,
   ListEarningsQueryDto,
-  ListPayoutsQueryDto,
+  ListSettlementQueryDto,
+  RecordFeesReceivedDto,
   RegisterRiderDto,
   RejectOfferDto,
-  RequestPayoutDto,
   SetAvailabilityDto,
   UpdateLocationDto,
   UpdateRiderDto,
@@ -59,14 +58,10 @@ import {
   RejectOfferUseCase,
 } from './application/use-cases/dispatch.use-cases';
 import {
-  CancelPayoutUseCase,
   EarningsSummaryUseCase,
-  GetRiderWalletUseCase,
   ListEarningsUseCase,
-  ListPayoutsUseCase,
-  ListWalletTransactionsUseCase,
-  RequestPayoutUseCase,
 } from './application/use-cases/earnings.use-cases';
+import { RiderSettlementUseCases } from './application/use-cases/settlement.use-cases';
 import { ResubmitApplicationUseCase } from './application/use-cases/rider-approval.use-cases';
 import {
   GetMyRiderProfileUseCase,
@@ -84,7 +79,7 @@ import {
  *
  * Every route resolves the rider from the access token rather than from a path
  * parameter, so there is no id a caller could swap to reach another rider's
- * offers, earnings or wallet. Operational routes additionally require an
+ * offers, earnings or balances. Operational routes additionally require an
  * approved account: an applicant can upload documents and watch their status,
  * and nothing else.
  */
@@ -115,11 +110,7 @@ export class RidersController {
     private readonly confirmDelivery: ConfirmDeliveryUseCase,
     private readonly listEarnings: ListEarningsUseCase,
     private readonly earningsSummary: EarningsSummaryUseCase,
-    private readonly wallet: GetRiderWalletUseCase,
-    private readonly walletTransactions: ListWalletTransactionsUseCase,
-    private readonly requestPayout: RequestPayoutUseCase,
-    private readonly listPayouts: ListPayoutsUseCase,
-    private readonly cancelPayout: CancelPayoutUseCase,
+    private readonly settlement: RiderSettlementUseCases,
   ) {}
 
   // ── Registration and profile ───────────────────────────────
@@ -355,7 +346,8 @@ export class RidersController {
   @ApiOperation({
     summary: 'Confirm the delivery with the customer’s code',
     description:
-      'ON_THE_WAY → DELIVERED, then credits your wallet with the itemised fare. ' +
+      'ON_THE_WAY → DELIVERED, then records your fee (delivery fee + tip) and ' +
+      'what you and the business now owe each other for the order. ' +
       'The code is what makes "delivered" mean something, so this is the only ' +
       'route that can complete a delivery. Five wrong codes burn it and the ' +
       'delivery has to be closed by support.',
@@ -380,14 +372,14 @@ export class RidersController {
     return this.assignmentsFor(actor, query);
   }
 
-  // ── Earnings and wallet ────────────────────────────────────
+  // ── Earnings ───────────────────────────────────────────────
 
   @Get('me/earnings')
   @ApiOperation({
     summary: 'My earnings ledger',
     description:
-      'Itemised: base fare, distance and tip are separate rows, so how a ' +
-      'payment was arrived at is answerable without recomputing history.',
+      'What you kept per delivery: the delivery fee and the tip as separate ' +
+      'rows. Nothing here is held by the platform; it is your own record.',
   })
   @ApiPaginatedResponse(EarningDto)
   earnings(
@@ -404,75 +396,63 @@ export class RidersController {
     return this.earningsSummary.execute(actor);
   }
 
-  @Get('me/wallet')
+  // ── Settlement with restaurants ────────────────────────────
+
+  @Get('me/settlements')
   @ApiOperation({
-    summary: 'My wallet balance',
+    summary: 'What I owe businesses, and what they owe me',
     description:
-      'Money held against a withdrawal in progress has already left the ' +
-      'balance and is reported separately, because riders read "balance" as ' +
-      '"what I can take out today".',
+      'One row per business. A positive balance is order money you collected ' +
+      'and still need to hand over; a negative one is delivery fees the ' +
+      'business still owes you.',
   })
-  @ApiResponse({ status: 200, type: RiderWalletDto })
-  myWallet(@CurrentUser() actor: AuthenticatedUser): Promise<RiderWalletDto> {
-    return this.wallet.execute(actor);
+  @ApiResponse({ status: 200, type: [RestaurantBalanceDto] })
+  balances(@CurrentUser() actor: AuthenticatedUser): Promise<RestaurantBalanceDto[]> {
+    return this.settlement.balances(actor);
   }
 
-  @Get('me/wallet/transactions')
-  @ApiOperation({ summary: 'My wallet statement' })
-  @ApiPaginatedResponse(WalletTransactionDto)
-  statement(
+  @Get('me/settlements/entries')
+  @ApiOperation({
+    summary: 'Per-order statement',
+    description: 'What each delivery added to the balance. Filter with restaurantId.',
+  })
+  @ApiPaginatedResponse(RiderLedgerEntryDto)
+  settlementEntries(
     @CurrentUser() actor: AuthenticatedUser,
-    @Query() query: PaginationQueryDto,
-  ): Promise<PaginatedResult<WalletTransactionDto>> {
-    return this.walletTransactions.execute(actor, query.page, query.limit);
+    @Query() query: ListSettlementQueryDto,
+  ): Promise<PaginatedResult<RiderLedgerEntryDto>> {
+    return this.settlement.entries(actor, query);
   }
 
-  // ── Withdrawals ────────────────────────────────────────────
+  @Get('me/settlements/payments')
+  @ApiOperation({
+    summary: 'Money that changed hands',
+    description: 'Cash you handed over and fees you were paid. Filter with restaurantId.',
+  })
+  @ApiPaginatedResponse(RiderSettlementDto)
+  settlementPayments(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Query() query: ListSettlementQueryDto,
+  ): Promise<PaginatedResult<RiderSettlementDto>> {
+    return this.settlement.settlements(actor, query);
+  }
 
-  @Post('me/withdrawals')
+  @Post('me/settlements/fees-received')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
-    summary: 'Request a withdrawal',
+    summary: 'Confirm a business paid my fees',
     description:
-      'The amount leaves your wallet immediately and is held until an operator ' +
-      'processes it, so it cannot be spent twice. One request at a time; ' +
-      'cancelling or a rejection returns the money.',
+      'Only you can confirm money that reached you. Cash you hand to a ' +
+      'business is confirmed by the business instead. The amount cannot ' +
+      'exceed what the business currently owes you.',
   })
-  @ApiResponse({ status: 201, type: PayoutRequestDto })
-  @ApiResponse({
-    status: 422,
-    description: 'Below the minimum, more than the balance, or one is already in flight.',
-  })
-  withdraw(
+  @ApiResponse({ status: 201, type: RiderSettlementDto })
+  @ApiResponse({ status: 422, description: 'More than the business owes you.' })
+  feesReceived(
     @CurrentUser() actor: AuthenticatedUser,
-    @Body() dto: RequestPayoutDto,
-  ): Promise<PayoutRequestDto> {
-    return this.requestPayout.execute(actor, dto);
-  }
-
-  @Get('me/withdrawals')
-  @ApiOperation({ summary: 'My withdrawal history' })
-  @ApiPaginatedResponse(PayoutRequestDto)
-  withdrawals(
-    @CurrentUser() actor: AuthenticatedUser,
-    @Query() query: ListPayoutsQueryDto,
-  ): Promise<PaginatedResult<PayoutRequestDto>> {
-    return this.listPayouts.mine(actor, query);
-  }
-
-  @Post('me/withdrawals/:id/cancel')
-  @HttpCode(HttpStatus.OK)
-  @ApiParam({ name: 'id' })
-  @ApiOperation({
-    summary: 'Cancel a withdrawal I requested',
-    description: 'Only while it is still pending. The held money goes straight back.',
-  })
-  @ApiResponse({ status: 200, type: PayoutRequestDto })
-  cancelWithdrawal(
-    @Param('id') id: string,
-    @CurrentUser() actor: AuthenticatedUser,
-  ): Promise<PayoutRequestDto> {
-    return this.cancelPayout.execute(id, actor);
+    @Body() dto: RecordFeesReceivedDto,
+  ): Promise<RiderSettlementDto> {
+    return this.settlement.recordFeesReceived(actor, dto);
   }
 
   /** Offers and history are the same query, scoped to the calling rider. */

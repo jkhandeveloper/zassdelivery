@@ -125,7 +125,7 @@ export class DeleteCategoryUseCase {
     // customers while leaving those links intact.
     if (inUse > 0) {
       throw new BusinessRuleViolationException(
-        `${inUse} restaurant(s) use this category. Deactivate it instead of deleting it.`,
+        `${inUse} business(s) use this category. Deactivate it instead of deleting it.`,
       );
     }
 

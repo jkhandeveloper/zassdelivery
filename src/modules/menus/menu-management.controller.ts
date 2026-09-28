@@ -130,7 +130,7 @@ export class MenuManagementController {
   @ApiParam({ name: 'restaurantId' })
   @ApiOperation({
     summary: 'Create a menu',
-    description: 'A restaurant may run several, e.g. "Lunch" and "Late Night".',
+    description: 'A business may run several, e.g. "Lunch" and "Late Night".',
   })
   @ApiResponse({ status: 201, type: MenuDto })
   addMenu(
@@ -248,7 +248,7 @@ export class MenuManagementController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a dish',
-    description: 'The owning restaurant is derived from the section, not the request.',
+    description: 'The owning business is derived from the section, not the request.',
   })
   @ApiResponse({ status: 201, type: MenuItemAdminDto })
   @ApiResponse({ status: 422, description: 'Discount above base price, or a half-set window.' })
@@ -263,7 +263,7 @@ export class MenuManagementController {
   @ApiParam({ name: 'itemId' })
   @ApiOperation({
     summary: 'Update a dish',
-    description: 'A dish can only be moved to a section of the same restaurant.',
+    description: 'A dish can only be moved to a section of the same business.',
   })
   @ApiResponse({ status: 200, type: MenuItemAdminDto })
   editItem(
@@ -481,7 +481,7 @@ export class MenuManagementController {
     summary: 'Bulk update dishes',
     description:
       'Reprice or restock up to 200 dishes in one transaction. Every id is ' +
-      'verified against this restaurant before anything is written.',
+      'verified against this business before anything is written.',
   })
   @ApiResponse({ status: 200, type: BulkResultDto })
   bulk(

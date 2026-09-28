@@ -28,8 +28,6 @@ import {
   UserRole,
   UserStatus,
   VehicleType,
-  WalletTransactionReason,
-  WalletTransactionType,
 } from '@prisma/client';
 import * as argon2 from 'argon2';
 
@@ -54,9 +52,6 @@ const PERMISSION_MATRIX: Record<string, string[]> = {
   orders: ['read', 'create', 'update', 'cancel', 'refund', 'assign'],
   drivers: ['read', 'create', 'update', 'approve', 'suspend'],
   payments: ['read', 'refund'],
-  /// Rider withdrawals. Separate from `payments` so a dispatcher can work the
-  /// board without also being able to move riders' money out of the platform.
-  payouts: ['read', 'approve'],
   /// Vendor subscriptions. `manage` is the one that moves money: confirming a
   /// vendor's transfer, writing an invoice off, or putting a vendor on a
   /// negotiated rate. Reading the queue is the far commoner need.
@@ -118,8 +113,8 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
 const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   [UserRole.SUPER_ADMIN]: 'Unrestricted access to every part of the platform.',
   [UserRole.ADMIN]: 'Day-to-day platform operations and moderation.',
-  [UserRole.VENDOR_OWNER]: 'Owns one or more restaurants and their menus.',
-  [UserRole.VENDOR_STAFF]: 'Works in a restaurant; manages menus and incoming orders.',
+  [UserRole.VENDOR_OWNER]: 'Owns one or more businesses and their menus.',
+  [UserRole.VENDOR_STAFF]: 'Works in a business; manages menus and incoming orders.',
   [UserRole.RIDER]: 'Delivers orders to customers.',
   [UserRole.CUSTOMER]: 'Places orders on the platform.',
 };
@@ -586,14 +581,6 @@ async function seedDrivers(): Promise<void> {
         },
       });
     }
-
-    // Earnings land in a wallet; a rider whose wallet only appeared on their
-    // first payout would fail at the worst possible moment.
-    await prisma.wallet.upsert({
-      where: { userId: user.id },
-      update: {},
-      create: { userId: user.id },
-    });
   }
 
   console.warn(`  ✓ ${drivers.length} drivers with vehicles and verified documents`);
@@ -978,7 +965,7 @@ async function seedRestaurants(): Promise<void> {
       create: category,
     });
   }
-  console.warn(`  ✓ ${RESTAURANT_CATEGORIES.length} restaurant categories`);
+  console.warn(`  ✓ ${RESTAURANT_CATEGORIES.length} business categories`);
 
   for (const seed of RESTAURANTS) {
     const owner = await prisma.user.findUniqueOrThrow({ where: { phone: seed.ownerPhone } });
@@ -1362,7 +1349,7 @@ async function seedContent(): Promise<void> {
       isPublic: false,
       description:
         "The platform's own JazzCash, Easypaisa and bank QR codes, which vendors " +
-        'transfer their monthly fee to. Same shape as a restaurant’s scan-to-pay ' +
+        'transfer their monthly fee to. Same shape as a business’s scan-to-pay ' +
         'list; an empty list means no vendor can pay until one is added.',
     },
     {
@@ -1379,7 +1366,7 @@ async function seedContent(): Promise<void> {
       valueType: SettingValueType.NUMBER,
       group: 'dispatch',
       isPublic: false,
-      description: 'How far from the restaurant a rider may be and still be offered the run.',
+      description: 'How far from the business a rider may be and still be offered the run.',
     },
     {
       key: 'dispatch.location_freshness_minutes',
@@ -1388,46 +1375,6 @@ async function seedContent(): Promise<void> {
       group: 'dispatch',
       isPublic: false,
       description: 'Rider positions older than this are treated as unknown when ranking.',
-    },
-    {
-      key: 'earnings.base_fare',
-      value: '60',
-      valueType: SettingValueType.NUMBER,
-      group: 'earnings',
-      isPublic: false,
-      description: 'Flat amount a rider is paid for taking a delivery, in PKR.',
-    },
-    {
-      key: 'earnings.per_km_rate',
-      value: '18',
-      valueType: SettingValueType.NUMBER,
-      group: 'earnings',
-      isPublic: false,
-      description: 'Per-kilometre component of a rider’s delivery fare.',
-    },
-    {
-      key: 'earnings.minimum_fare',
-      value: '80',
-      valueType: SettingValueType.NUMBER,
-      group: 'earnings',
-      isPublic: false,
-      description: 'Floor on what a single delivery pays, however short the trip.',
-    },
-    {
-      key: 'earnings.tip_share_percentage',
-      value: '100',
-      valueType: SettingValueType.NUMBER,
-      group: 'earnings',
-      isPublic: false,
-      description: 'Share of the customer tip that reaches the rider. The tip is their money.',
-    },
-    {
-      key: 'payouts.min_withdrawal_amount',
-      value: '500',
-      valueType: SettingValueType.NUMBER,
-      group: 'payouts',
-      isPublic: false,
-      description: 'Smallest withdrawal a rider may request, in PKR.',
     },
     {
       key: 'support.phone',
@@ -1476,14 +1423,14 @@ async function seedContent(): Promise<void> {
     {
       question: 'Can I cancel my order?',
       answer:
-        'Yes, free of charge within 5 minutes of placing it, as long as the restaurant has not started preparing your food.',
+        'Yes, free of charge within 5 minutes of placing it, as long as the business has not started preparing your food.',
       category: 'orders',
       sortOrder: 2,
     },
     {
       question: 'How long does delivery take?',
       answer:
-        'Most orders arrive within 30 to 45 minutes, depending on your zone and how busy the restaurant is.',
+        'Most orders arrive within 30 to 45 minutes, depending on your zone and how busy the business is.',
       category: 'delivery',
       sortOrder: 3,
     },
@@ -1671,7 +1618,7 @@ async function seedSampleOrder(): Promise<void> {
         status: TransactionStatus.SUCCESS,
         amount: subtotal * 0.15,
         reference: `TXN-${orderNumber}-COMMISSION`,
-        description: 'Platform commission withheld from restaurant payout',
+        description: 'Platform commission withheld from business payout',
         processedAt: deliveredAt,
       },
     });
@@ -1684,7 +1631,7 @@ async function seedSampleOrder(): Promise<void> {
         driverId: driver.id,
         status: AssignmentStatus.COMPLETED,
         pickupDistanceKm: 0.8,
-        estimatedEarning: 103.2,
+        estimatedEarning: deliveryFee,
         isAuto: true,
         expiresAt: new Date(deliveredAt.getTime() - 45 * 60_000),
         respondedAt: new Date(deliveredAt.getTime() - 46 * 60_000),
@@ -1693,45 +1640,29 @@ async function seedSampleOrder(): Promise<void> {
       },
     });
 
-    // Itemised at the seeded rates: base fare 60 + 2.4 km at 18/km.
-    const earningLines = [
-      { type: DriverEarningType.BASE_FARE, amount: 60, description: 'Base fare' },
-      {
-        type: DriverEarningType.DISTANCE,
-        amount: 43.2,
-        description: 'Distance — 2.4 km at Rs. 18/km',
-      },
-    ];
-    const earning = earningLines.reduce((sum, line) => sum + line.amount, 0);
-
-    await tx.driverEarning.createMany({
-      data: earningLines.map((line) => ({
+    // The rider keeps the customer's delivery fee. It was a cash order, so the
+    // rider holds the whole payment and owes the kitchen everything else.
+    await tx.driverEarning.create({
+      data: {
         driverId: driver.id,
         orderId: order.id,
         assignmentId: assignment.id,
-        type: line.type,
-        amount: line.amount,
-        description: line.description,
+        type: DriverEarningType.DELIVERY_FEE,
+        amount: deliveryFee,
+        description: 'Delivery fee',
         earnedAt: deliveredAt,
-      })),
+      },
     });
 
-    // Credit the rider's delivery earning to their wallet.
-    const riderWallet = await tx.wallet.findUniqueOrThrow({ where: { userId: driver.userId } });
-    await tx.wallet.update({
-      where: { id: riderWallet.id },
-      data: { balance: { increment: earning } },
-    });
-    await tx.walletTransaction.create({
+    await tx.riderLedgerEntry.create({
       data: {
-        walletId: riderWallet.id,
-        type: WalletTransactionType.CREDIT,
-        reason: WalletTransactionReason.DRIVER_EARNING,
-        amount: earning,
-        balanceAfter: Number(riderWallet.balance) + earning,
-        referenceType: 'order',
-        referenceId: order.id,
-        description: `Delivery earnings for ${orderNumber}`,
+        driverId: driver.id,
+        restaurantId: restaurant.id,
+        orderId: order.id,
+        collectedAmount: totalAmount,
+        riderFee: deliveryFee,
+        netAmount: totalAmount - deliveryFee,
+        createdAt: deliveredAt,
       },
     });
 

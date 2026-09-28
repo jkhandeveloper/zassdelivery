@@ -32,7 +32,7 @@ import type { OpenState } from './domain/services/opening-hours.service';
  * The public storefront. Every route here is unauthenticated — customers browse
  * before they sign in — and only ever exposes approved, non-deleted listings.
  */
-@ApiTags('Restaurants')
+@ApiTags('Businesses')
 @Public()
 @Controller('restaurants')
 export class RestaurantsController {
@@ -46,10 +46,10 @@ export class RestaurantsController {
 
   @Get()
   @ApiOperation({
-    summary: 'Search restaurants',
+    summary: 'Search businesses',
     description:
       'Paginated, filterable and sortable. Supply latitude and longitude to ' +
-      'limit results to restaurants whose delivery radius actually reaches the ' +
+      'limit results to businesses whose delivery radius actually reaches the ' +
       'customer, and to have distanceMeters returned on each row. Only approved ' +
       'listings are ever returned.',
   })
@@ -68,13 +68,13 @@ export class RestaurantsController {
   @Get(':slug')
   @ApiParam({ name: 'slug', example: 'chapli-kabab-house-pabbi' })
   @ApiOperation({
-    summary: 'Get a restaurant by slug',
+    summary: 'Get a business by slug',
     description:
       'Includes images, the weekly schedule, and canOrderNow — the single flag ' +
       'a client should use to enable the order button.',
   })
   @ApiResponse({ status: 200, type: RestaurantDto })
-  @ApiResponse({ status: 404, description: 'No approved restaurant with that slug.' })
+  @ApiResponse({ status: 404, description: 'No approved business with that slug.' })
   detail(@Param('slug') slug: string): Promise<RestaurantDto> {
     return this.getRestaurant.bySlug(slug);
   }
@@ -83,7 +83,7 @@ export class RestaurantsController {
   @ApiParam({ name: 'id' })
   @ApiOperation({
     summary: 'Get business hours',
-    description: 'Includes whether the restaurant is open right now in Asia/Karachi.',
+    description: 'Includes whether the business is open right now in Asia/Karachi.',
   })
   @ApiResponse({ status: 200, type: [BusinessHourResponseDto] })
   hours(
@@ -94,7 +94,7 @@ export class RestaurantsController {
 
   @Get(':id/images')
   @ApiParam({ name: 'id' })
-  @ApiOperation({ summary: 'Get the restaurant gallery' })
+  @ApiOperation({ summary: 'Get the business gallery' })
   @ApiResponse({ status: 200, type: [RestaurantImageDto] })
   images(@Param('id') id: string): Promise<RestaurantImageDto[]> {
     return this.listImages.execute(id);

@@ -1,11 +1,11 @@
 import type {
   DriverEarning,
   DriverEarningType,
-  PayoutMethod,
-  PayoutRequest,
-  PayoutStatus,
+  PaymentMethod,
   Prisma,
-  WalletTransaction,
+  RiderLedgerEntry,
+  RiderSettlement,
+  RiderSettlementDirection,
 } from '@prisma/client';
 
 import type { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
@@ -35,43 +35,82 @@ export interface EarningsSummary {
   deliveriesLifetime: number;
 }
 
-export interface CreditEarningsInput {
+export interface RecordDeliveryInput {
   driverId: string;
-  /** The user whose wallet receives the money — the rider behind the profile. */
-  userId: string;
+  restaurantId: string;
   orderId: string;
-  orderNumber: string;
   assignmentId: string;
+  /** What the customer paid for the order, taken from the order itself. */
+  totalAmount: number;
   components: Array<{ type: DriverEarningType; amount: number; description: string }>;
   total: number;
 }
 
-export interface ListPayoutsFilter {
+/** What a delivered order left the rider and the restaurant owing each other. */
+export interface RecordedDelivery {
+  /** Delivery fee plus tip, kept by the rider. */
+  earned: number;
+  /** Money the rider took from the customer. Zero when the restaurant was paid. */
+  collected: number;
+  /** collected - earned. Positive: rider owes the restaurant. Negative: the reverse. */
+  net: number;
+}
+
+// ── Rider ↔ restaurant settlement ─────────────────────────────
+
+/**
+ * Running totals between one rider and one restaurant.
+ *
+ * `balance` is what the rider owes the restaurant: order money collected, less
+ * the rider's fees, less cash already handed over, plus fees already paid.
+ * Negative means the restaurant owes the rider.
+ */
+export interface SettlementTotals {
+  driverId: string;
+  restaurantId: string;
+  deliveries: number;
+  cashCollected: number;
+  riderFees: number;
+  cashHandedOver: number;
+  feesPaid: number;
+  balance: number;
+  lastActivityAt: Date | null;
+}
+
+export type RestaurantBalance = SettlementTotals & {
+  restaurant: { name: string; phone: string | null; addressLine: string };
+};
+
+export type RiderBalance = SettlementTotals & {
+  driver: { fullName: string; phone: string; paymentQrCodes: Prisma.JsonValue };
+};
+
+export interface SettlementScope {
+  driverId?: string;
+  restaurantId?: string;
   page: number;
   limit: number;
-  orderBy: Prisma.PayoutRequestOrderByWithRelationInput;
-  driverId?: string;
-  status?: PayoutStatus;
-  from?: Date;
-  to?: Date;
 }
 
-export interface RequestPayoutInput {
+export type LedgerEntryWithContext = RiderLedgerEntry & {
+  order: { orderNumber: string; paymentMethod: PaymentMethod };
+  restaurant: { name: string };
+  driver: { user: { fullName: string } };
+};
+
+export type SettlementWithContext = RiderSettlement & {
+  restaurant: { name: string };
+  driver: { user: { fullName: string } };
+  recordedBy: { fullName: string } | null;
+};
+
+export interface RecordSettlementInput {
   driverId: string;
-  userId: string;
+  restaurantId: string;
+  direction: RiderSettlementDirection;
   amount: number;
-  method: PayoutMethod;
-  bankName: string | null;
-  accountTitle: string;
-  accountNumber: string;
-}
-
-export interface WalletSnapshot {
-  balance: number;
-  currency: string;
-  isLocked: boolean;
-  /** Money already committed to withdrawal requests still being processed. */
-  pendingWithdrawals: number;
+  note: string | null;
+  recordedById: string;
 }
 
 export abstract class RiderFinanceRepository {
@@ -81,51 +120,33 @@ export abstract class RiderFinanceRepository {
   abstract summarise(driverId: string, now: Date): Promise<EarningsSummary>;
 
   /**
-   * Posts a completed delivery's earnings and credits the rider's wallet in one
-   * transaction: earning rows, wallet balance, wallet ledger entry and the
-   * platform payout transaction all land together, or none of them do.
+   * Records a completed delivery: the rider's earning rows and the entry that
+   * says who owes whom for it, in one transaction.
    *
-   * Idempotent on the order — a retried delivery confirmation must not pay the
-   * rider twice.
+   * Nothing is credited anywhere. The platform never holds order money, so the
+   * rider's fee comes out of the cash they collected, or from the restaurant.
+   *
+   * Idempotent on the order: a retried delivery confirmation must not count the
+   * same run twice.
    */
-  abstract creditDeliveryEarnings(input: CreditEarningsInput): Promise<number>;
+  abstract recordDelivery(input: RecordDeliveryInput): Promise<RecordedDelivery>;
 
-  // ── Wallet ───────────────────────────────────────────────────
+  // ── Settlement ───────────────────────────────────────────────
 
-  abstract walletFor(userId: string): Promise<WalletSnapshot>;
-  abstract listWalletTransactions(
-    userId: string,
-    page: number,
-    limit: number,
-  ): Promise<PaginatedResult<WalletTransaction>>;
+  abstract balancesForRider(driverId: string): Promise<RestaurantBalance[]>;
+  abstract balancesForRestaurant(restaurantId: string): Promise<RiderBalance[]>;
 
-  // ── Withdrawals ──────────────────────────────────────────────
-
-  abstract listPayouts(filter: ListPayoutsFilter): Promise<PaginatedResult<PayoutRequest>>;
-  abstract findPayout(id: string): Promise<PayoutRequest | null>;
-  abstract hasOpenPayout(driverId: string): Promise<boolean>;
+  abstract listLedgerEntries(
+    scope: SettlementScope,
+  ): Promise<PaginatedResult<LedgerEntryWithContext>>;
+  abstract listSettlements(scope: SettlementScope): Promise<PaginatedResult<SettlementWithContext>>;
 
   /**
-   * Creates the request and debits the wallet in the same transaction, so the
-   * money cannot be spent while an operator is still deciding. The balance is
-   * re-read inside that transaction: a check made beforehand would be stale by
-   * the time it mattered.
+   * Records money that changed hands between a rider and a restaurant.
+   *
+   * The balance is re-read inside the transaction, under a lock on the pair,
+   * and the amount may not exceed what is owed in that direction: two people
+   * recording the same handover at once must not push the balance past zero.
    */
-  abstract requestPayout(input: RequestPayoutInput): Promise<PayoutRequest>;
-
-  abstract approvePayout(id: string, reviewerId: string): Promise<PayoutRequest>;
-
-  /** Marks the transfer done and records the bank or gateway reference. */
-  abstract markPayoutPaid(
-    id: string,
-    reviewerId: string,
-    paymentReference: string | null,
-  ): Promise<PayoutRequest>;
-
-  /** Returns the held amount to the wallet and closes the request. */
-  abstract refundPayout(
-    id: string,
-    status: PayoutStatus,
-    context: { reviewerId: string | null; reason: string },
-  ): Promise<PayoutRequest>;
+  abstract recordSettlement(input: RecordSettlementInput): Promise<SettlementWithContext>;
 }

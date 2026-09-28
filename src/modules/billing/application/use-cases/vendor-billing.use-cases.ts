@@ -47,7 +47,7 @@ export class VendorBillingAccessService {
     const restaurant = await this.restaurants.findById(restaurantId);
 
     if (restaurant === null) {
-      throw new ResourceNotFoundException('Restaurant', restaurantId);
+      throw new ResourceNotFoundException('Business', restaurantId);
     }
 
     this.assertMayView(restaurant.ownerId, actor);

@@ -19,6 +19,7 @@ export type AssignmentWithOrder = DeliveryAssignment & {
     | 'status'
     | 'type'
     | 'totalAmount'
+    | 'deliveryFee'
     | 'tipAmount'
     | 'paymentMethod'
     | 'paymentStatus'

@@ -30,7 +30,7 @@ export class StartCheckoutDto {
     description:
       'How the customer wants to pay. Cash and wallet settle in-house; ' +
       'JazzCash and Easypaisa return checkout parameters to post to the gateway; ' +
-      'QR_TRANSFER returns the restaurant’s QR codes to scan.',
+      'QR_TRANSFER returns the business’s QR codes to scan.',
   })
   @IsIn(CUSTOMER_METHODS, {
     message: `method must be one of: ${CUSTOMER_METHODS.join(', ')}`,
@@ -41,8 +41,8 @@ export class StartCheckoutDto {
 export class ListPaymentMethodsQueryDto {
   @ApiPropertyOptional({
     description:
-      'The restaurant being checked out from. Scan-to-pay is only reported ' +
-      'available when that restaurant has put up a QR code.',
+      'The business being checked out from. Scan-to-pay is only reported ' +
+      'available when that business has put up a QR code.',
   })
   @IsOptional()
   @IsString()

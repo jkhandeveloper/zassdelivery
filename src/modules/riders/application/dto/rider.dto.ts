@@ -4,8 +4,6 @@ import {
   DriverAvailability,
   DriverDocumentType,
   DriverStatus,
-  PayoutMethod,
-  PayoutStatus,
   VehicleType,
 } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
@@ -367,12 +365,14 @@ export class ConfirmDeliveryDto {
   code!: string;
 }
 
-// ── Withdrawals ────────────────────────────────────────────────
+// ── Settlements ────────────────────────────────────────────────
 
-export class RequestPayoutDto {
+export class RecordSettlementDto {
   @ApiProperty({
-    example: 2500,
-    description: 'Amount in PKR. Held out of the wallet as soon as the request is made.',
+    example: 1500,
+    description:
+      'Amount in PKR that reached you. It cannot exceed what is currently owed ' +
+      'to you, so a typo cannot turn a balance the wrong way round.',
     minimum: 1,
   })
   @Type(() => Number)
@@ -381,31 +381,26 @@ export class RequestPayoutDto {
   @Max(1000000)
   amount!: number;
 
-  @ApiProperty({ enum: PayoutMethod, default: PayoutMethod.BANK_TRANSFER })
-  @IsEnum(PayoutMethod)
-  method!: PayoutMethod;
-}
-
-export class RejectPayoutDto {
-  @ApiProperty({ example: 'Account title does not match the CNIC.', maxLength: 300 })
-  @IsString()
-  @MinLength(5)
-  @MaxLength(300)
-  @Transform(trim)
-  reason!: string;
-}
-
-export class MarkPayoutPaidDto {
-  @ApiPropertyOptional({
-    example: 'IBFT-99881234',
-    description: 'Bank or gateway reference for the transfer.',
-    maxLength: 120,
-  })
+  @ApiPropertyOptional({ example: 'Cash at the counter', maxLength: 300 })
   @IsOptional()
   @IsString()
-  @MaxLength(120)
+  @MaxLength(300)
   @Transform(trim)
-  paymentReference?: string;
+  note?: string;
+}
+
+/** The rider records delivery fees a restaurant paid them. */
+export class RecordFeesReceivedDto extends RecordSettlementDto {
+  @ApiProperty({ description: 'The business that paid you.' })
+  @IsString()
+  restaurantId!: string;
+}
+
+/** The restaurant records order money a rider handed over. */
+export class RecordCashReceivedDto extends RecordSettlementDto {
+  @ApiProperty({ description: 'The rider who handed the money over.' })
+  @IsString()
+  driverId!: string;
 }
 
 // ── Queries ────────────────────────────────────────────────────
@@ -499,33 +494,14 @@ export class ListEarningsQueryDto extends PaginationQueryDto {
   to?: Date;
 }
 
-export const PAYOUT_SORT_FIELDS = ['createdAt', 'amount', 'processedAt'] as const;
-
-export class ListPayoutsQueryDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ enum: PAYOUT_SORT_FIELDS, default: 'createdAt' })
+export class ListSettlementQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ description: 'Rider view: narrow to one business.' })
   @IsOptional()
-  @IsIn(PAYOUT_SORT_FIELDS, { message: `sortBy must be one of: ${PAYOUT_SORT_FIELDS.join(', ')}` })
-  declare sortBy?: (typeof PAYOUT_SORT_FIELDS)[number];
+  @IsString()
+  restaurantId?: string;
 
-  @ApiPropertyOptional({ enum: PayoutStatus })
-  @IsOptional()
-  @IsEnum(PayoutStatus)
-  status?: PayoutStatus;
-
-  @ApiPropertyOptional({ description: 'Staff view: filter by rider.' })
+  @ApiPropertyOptional({ description: 'Business view: narrow to one rider.' })
   @IsOptional()
   @IsString()
   driverId?: string;
-
-  @ApiPropertyOptional({ example: '2026-08-01T00:00:00.000Z' })
-  @IsOptional()
-  @Type(() => Date)
-  @IsDate({ message: 'from must be a valid ISO 8601 date' })
-  from?: Date;
-
-  @ApiPropertyOptional({ example: '2026-08-31T23:59:59.999Z' })
-  @IsOptional()
-  @Type(() => Date)
-  @IsDate({ message: 'to must be a valid ISO 8601 date' })
-  to?: Date;
 }

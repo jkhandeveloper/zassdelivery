@@ -13,7 +13,7 @@ function event(overrides: Partial<OrderStatusEventPayload> = {}): OrderStatusEve
     orderId: 'order-1',
     orderNumber: 'ZD-1001',
     status: OrderStatus.PLACED,
-    statusText: 'Sent to the restaurant',
+    statusText: 'Sent to the business',
     previousStatus: null,
     actor: null,
     customerId: 'customer-1',
@@ -45,7 +45,7 @@ function recipients(notify: jest.Mocked<NotifyService>): string[] {
 beforeEach(() => jest.clearAllMocks());
 
 describe('OrderNotificationsListener — a new order', () => {
-  it('tells the customer and the restaurant', async () => {
+  it('tells the customer and the business', async () => {
     const { listener, notify } = build();
 
     await listener.onPlaced(event());
@@ -79,7 +79,7 @@ describe('OrderNotificationsListener — a new order', () => {
 });
 
 describe('OrderNotificationsListener — transitions', () => {
-  it('tells the customer when the restaurant accepts', async () => {
+  it('tells the customer when the business accepts', async () => {
     const { listener, notify } = build();
 
     await listener.onStatusChanged(event({ status: OrderStatus.CONFIRMED }));
@@ -132,7 +132,7 @@ describe('OrderNotificationsListener — transitions', () => {
     expect(recipients(notify)).toEqual(['customer-1', 'vendor-1']);
   });
 
-  it('tells only the customer when the restaurant rejects', async () => {
+  it('tells only the customer when the business rejects', async () => {
     const { listener, notify } = build();
 
     await listener.onStatusChanged(

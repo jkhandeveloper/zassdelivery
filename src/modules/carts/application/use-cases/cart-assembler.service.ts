@@ -50,7 +50,7 @@ export class CartAssemblerService {
     if (cart.address !== null && quote === null) {
       issues.push({
         code: 'OUTSIDE_DELIVERY_AREA',
-        message: 'This restaurant does not deliver to the selected address.',
+        message: 'This business does not deliver to the selected address.',
         blocking: true,
       });
     }
@@ -92,7 +92,7 @@ export class CartAssemblerService {
     if (totals.subtotal > 0 && totals.subtotal < minimumOrder) {
       issues.push({
         code: 'BELOW_MINIMUM_ORDER',
-        message: `This restaurant has a minimum order of Rs. ${minimumOrder}. Add Rs. ${money(
+        message: `This business has a minimum order of Rs. ${minimumOrder}. Add Rs. ${money(
           minimumOrder - totals.subtotal,
         )} more.`,
         blocking: true,

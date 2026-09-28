@@ -230,7 +230,7 @@ describe('RealtimeGateway — order subscriptions', () => {
   });
 });
 
-describe('RealtimeGateway — restaurant subscriptions', () => {
+describe('RealtimeGateway — business subscriptions', () => {
   it('joins a kitchen the caller works at', async () => {
     const { gateway } = build();
     const socket = fakeSocket();

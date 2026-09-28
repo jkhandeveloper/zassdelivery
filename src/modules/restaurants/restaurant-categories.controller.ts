@@ -20,7 +20,7 @@ import {
  * Category administration. Reading is public and lives on the storefront
  * controller; only writes are gated here.
  */
-@ApiTags('Restaurant Categories (Admin)')
+@ApiTags('Business Categories (Admin)')
 @ApiBearerAuth('access-token')
 @ApiResponse({ status: 401, description: 'Not authenticated.', type: ApiErrorResponseDto })
 @ApiResponse({ status: 403, description: 'Missing permission.', type: ApiErrorResponseDto })
@@ -60,7 +60,7 @@ export class RestaurantCategoriesController {
   @ApiOperation({
     summary: 'Delete a cuisine category',
     description:
-      'Refused while any restaurant still uses it — deleting would cascade the ' +
+      'Refused while any business still uses it — deleting would cascade the ' +
       'assignments away and silently strip the category from those listings. ' +
       'Deactivate it instead.',
   })

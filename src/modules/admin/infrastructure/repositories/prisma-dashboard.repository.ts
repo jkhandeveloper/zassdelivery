@@ -4,7 +4,6 @@ import {
   DriverStatus,
   OrderStatus,
   PaymentStatus,
-  PayoutStatus,
   RestaurantStatus,
   TicketStatus,
   UserRole,
@@ -124,7 +123,6 @@ export class PrismaDashboardRepository extends DashboardRepository {
       ordersAwaitingRestaurant,
       ordersAwaitingRider,
       openTickets,
-      pendingWithdrawals,
       unresolvedWebhooks,
     ] = await this.prisma.$transaction([
       this.prisma.restaurant.count({
@@ -151,7 +149,6 @@ export class PrismaDashboardRepository extends DashboardRepository {
           },
         },
       }),
-      this.prisma.payoutRequest.count({ where: { status: PayoutStatus.PENDING } }),
       this.prisma.webhookEvent.count({
         where: { status: { in: [WebhookStatus.RECEIVED, WebhookStatus.FAILED] } },
       }),
@@ -163,7 +160,6 @@ export class PrismaDashboardRepository extends DashboardRepository {
       ordersAwaitingRestaurant,
       ordersAwaitingRider,
       openTickets,
-      pendingWithdrawals,
       unresolvedWebhooks,
     };
   }

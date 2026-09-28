@@ -323,7 +323,7 @@ export class PrismaOrderRepository extends OrderRepository {
           status: TransactionStatus.PENDING,
           amount: commissionAmount,
           reference: `TXN-${orderNumber}-COMMISSION`,
-          description: 'Platform commission withheld from restaurant payout',
+          description: 'Platform commission withheld from business payout',
         },
       });
 

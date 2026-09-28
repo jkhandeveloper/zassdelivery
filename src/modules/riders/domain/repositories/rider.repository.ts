@@ -86,10 +86,7 @@ export abstract class RiderRepository {
   abstract existsByCnic(cnic: string): Promise<boolean>;
 
   /**
-   * Creates the rider profile and its first vehicle together, and opens a
-   * wallet for the earnings that will follow. A rider with a profile but no
-   * wallet would fail on their first completed delivery, which is the worst
-   * possible moment to discover it.
+   * Creates the rider profile and its first vehicle together.
    */
   abstract register(input: RegisterRiderInput): Promise<RiderWithDetails>;
 

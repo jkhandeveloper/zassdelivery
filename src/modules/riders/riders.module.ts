@@ -4,6 +4,7 @@ import { CartsModule } from '../carts/carts.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OrdersModule } from '../orders/orders.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { RestaurantsModule } from '../restaurants/restaurants.module';
 import { DispatchCoordinator } from './application/services/dispatch-coordinator.service';
 import { RiderSettingsService } from './application/services/rider-settings.service';
 import {
@@ -22,14 +23,8 @@ import {
   RejectOfferUseCase,
 } from './application/use-cases/dispatch.use-cases';
 import {
-  CancelPayoutUseCase,
   EarningsSummaryUseCase,
-  GetRiderWalletUseCase,
   ListEarningsUseCase,
-  ListPayoutsUseCase,
-  ListWalletTransactionsUseCase,
-  ProcessPayoutUseCase,
-  RequestPayoutUseCase,
 } from './application/use-cases/earnings.use-cases';
 import {
   ApproveRiderUseCase,
@@ -53,6 +48,10 @@ import {
   UpdateRiderProfileUseCase,
   UploadDocumentUseCase,
 } from './application/use-cases/rider-profile.use-cases';
+import {
+  RestaurantSettlementUseCases,
+  RiderSettlementUseCases,
+} from './application/use-cases/settlement.use-cases';
 import { AssignmentRepository } from './domain/repositories/assignment.repository';
 import { DeliveryNotificationPort } from './domain/repositories/delivery-notification.port';
 import { RiderFinanceRepository } from './domain/repositories/rider-finance.repository';
@@ -64,16 +63,18 @@ import { PrismaAssignmentRepository } from './infrastructure/repositories/prisma
 import { NotifyDeliveryNotificationAdapter } from './infrastructure/repositories/notify-delivery-notification.adapter';
 import { PrismaRiderFinanceRepository } from './infrastructure/repositories/prisma-rider-finance.repository';
 import { PrismaRiderRepository } from './infrastructure/repositories/prisma-rider.repository';
+import { RestaurantRiderSettlementsController } from './restaurant-rider-settlements.controller';
 import { RiderManagementController } from './rider-management.controller';
 import { RidersController } from './riders.controller';
 
 @Module({
   // OrdersModule supplies AdvanceOrderUseCase, so a rider's pickup and delivery
   // drive the same state machine every other actor does; CartsModule supplies
-  // the settings repository the fare and dispatch rates are read from; and
-  // NotificationsModule carries the delivery code to the customer's phone.
-  imports: [OrdersModule, CartsModule, NotificationsModule, RealtimeModule],
-  controllers: [RidersController, RiderManagementController],
+  // the settings repository the dispatch rates are read from;
+  // NotificationsModule carries the delivery code to the customer's phone; and
+  // RestaurantsModule answers whether a vendor may see a restaurant's balances.
+  imports: [OrdersModule, CartsModule, NotificationsModule, RealtimeModule, RestaurantsModule],
+  controllers: [RidersController, RiderManagementController, RestaurantRiderSettlementsController],
   providers: [
     // Pure domain services: no dependencies, registered directly.
     DispatchService,
@@ -118,12 +119,8 @@ import { RidersController } from './riders.controller';
 
     ListEarningsUseCase,
     EarningsSummaryUseCase,
-    GetRiderWalletUseCase,
-    ListWalletTransactionsUseCase,
-    RequestPayoutUseCase,
-    ListPayoutsUseCase,
-    CancelPayoutUseCase,
-    ProcessPayoutUseCase,
+    RiderSettlementUseCases,
+    RestaurantSettlementUseCases,
 
     { provide: RiderRepository, useClass: PrismaRiderRepository },
     { provide: AssignmentRepository, useClass: PrismaAssignmentRepository },

@@ -40,7 +40,6 @@ export interface DashboardQueues {
   ordersAwaitingRestaurant: number;
   ordersAwaitingRider: number;
   openTickets: number;
-  pendingWithdrawals: number;
   unresolvedWebhooks: number;
 }
 

@@ -21,7 +21,6 @@ import type { RiderFinanceRepository } from '../../domain/repositories/rider-fin
 import type { RiderWithDetails } from '../../domain/repositories/rider.repository';
 import { DeliveryOtpService } from '../../domain/services/delivery-otp.service';
 import { EarningsCalculator } from '../../domain/services/earnings.calculator';
-import type { RiderSettingsService } from '../services/rider-settings.service';
 import { ConfirmDeliveryUseCase, PickupOrderUseCase } from './delivery.use-cases';
 import type { AssignmentAccessService } from './dispatch.use-cases';
 
@@ -33,8 +32,6 @@ const RIDER: AuthenticatedUser = {
   staffRestaurantId: null,
   sessionId: 'session-1',
 };
-
-const RATES = { baseFare: 60, perKm: 18, tipSharePercentage: 100, minimumFare: 80 };
 
 const otpService = new DeliveryOtpService();
 
@@ -65,8 +62,10 @@ function assignment(overrides: Partial<AssignmentWithOrder> = {}): AssignmentWit
       status: OrderStatus.ON_THE_WAY,
       customerId: 'customer-1',
       distanceKm: 2.5,
+      deliveryFee: 100,
       tipAmount: 50,
       totalAmount: 1240,
+      restaurant: { id: 'restaurant-1', name: 'Chapli Kabab House' },
       paymentMethod: PaymentMethod.CASH_ON_DELIVERY,
       paymentStatus: PaymentStatus.PENDING,
     },
@@ -95,16 +94,14 @@ function mocks(loaded: AssignmentWithOrder) {
   } as unknown as jest.Mocked<DeliveryNotificationPort>;
 
   const finance = {
-    creditDeliveryEarnings: jest
+    recordDelivery: jest
       .fn()
-      .mockImplementation(({ total }: { total: number }) => Promise.resolve(total)),
+      .mockImplementation(({ total, totalAmount }: { total: number; totalAmount: number }) =>
+        Promise.resolve({ earned: total, collected: totalAmount, net: totalAmount - total }),
+      ),
   } as unknown as jest.Mocked<RiderFinanceRepository>;
 
-  const settings = {
-    earningRates: jest.fn().mockResolvedValue(RATES),
-  } as unknown as jest.Mocked<RiderSettingsService>;
-
-  return { access, assignments, advance, notifications, finance, settings };
+  return { access, assignments, advance, notifications, finance };
 }
 
 describe('PickupOrderUseCase', () => {
@@ -179,12 +176,11 @@ describe('ConfirmDeliveryUseCase', () => {
         otpService,
         parts.finance,
         new EarningsCalculator(),
-        parts.settings,
       ),
     };
   }
 
-  it('completes the delivery and credits the itemised fare on the right code', async () => {
+  it('completes the delivery and records the fee and tip on the right code', async () => {
     const { useCase, advance, assignments, finance } = build(assignment(issued));
 
     const result = await useCase.execute('order-1', { code: '4821' }, RIDER);
@@ -193,19 +189,50 @@ describe('ConfirmDeliveryUseCase', () => {
       otpVerified: true,
     });
     expect(assignments.complete).toHaveBeenCalledWith('assignment-1');
-    // 60 base + 45 distance + 50 tip.
-    expect(result.earned).toBe(155);
-    expect(finance.creditDeliveryEarnings).toHaveBeenCalledWith(
-      expect.objectContaining({ driverId: 'rider-1', orderId: 'order-1', total: 155 }),
+    // 100 delivery fee + 50 tip.
+    expect(result.earned).toBe(150);
+    expect(finance.recordDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        driverId: 'rider-1',
+        restaurantId: 'restaurant-1',
+        orderId: 'order-1',
+        totalAmount: 1240,
+        total: 150,
+      }),
     );
   });
 
-  it('returns the fare broken down into its components', async () => {
+  it('returns the fee and the tip as separate lines', async () => {
     const { useCase } = build(assignment(issued));
 
     const result = await useCase.execute('order-1', { code: '4821' }, RIDER);
 
-    expect(result.breakdown.map((line) => line.type)).toEqual(['BASE_FARE', 'DISTANCE', 'TIP']);
+    expect(result.breakdown.map((line) => line.type)).toEqual(['DELIVERY_FEE', 'TIP']);
+  });
+
+  it('tells a rider who collected cash how much to hand the business', async () => {
+    const { useCase } = build(assignment(issued));
+
+    const result = await useCase.execute('order-1', { code: '4821' }, RIDER);
+
+    expect(result.owedToRestaurant).toBe(1090);
+    expect(result.owedByRestaurant).toBe(0);
+    expect(result.message).toMatch(/hand Rs\. 1090 to Chapli Kabab House/);
+  });
+
+  it('tells a rider on a prepaid order that the business owes them the fee', async () => {
+    const { useCase, finance } = build(assignment(issued));
+    (finance.recordDelivery as jest.Mock).mockResolvedValueOnce({
+      earned: 150,
+      collected: 0,
+      net: -150,
+    });
+
+    const result = await useCase.execute('order-1', { code: '4821' }, RIDER);
+
+    expect(result.owedToRestaurant).toBe(0);
+    expect(result.owedByRestaurant).toBe(150);
+    expect(result.message).toMatch(/Chapli Kabab House owes you Rs\. 150/);
   });
 
   it('counts a wrong code as an attempt and leaves the order undelivered', async () => {
@@ -217,7 +244,7 @@ describe('ConfirmDeliveryUseCase', () => {
 
     expect(assignments.recordOtpFailure).toHaveBeenCalledWith('assignment-1');
     expect(advance.execute).not.toHaveBeenCalled();
-    expect(finance.creditDeliveryEarnings).not.toHaveBeenCalled();
+    expect(finance.recordDelivery).not.toHaveBeenCalled();
   });
 
   it('refuses once the attempt cap is spent, even with the right code', async () => {
@@ -245,14 +272,15 @@ describe('ConfirmDeliveryUseCase', () => {
     );
   });
 
-  it('pays the minimum fare on a very short run', async () => {
-    const shortRun = assignment(issued);
-    Object.assign(shortRun.order, { distanceKm: 0.2, tipAmount: 0 });
+  it('earns nothing on a free-delivery order without a tip', async () => {
+    const freeRun = assignment(issued);
+    Object.assign(freeRun.order, { deliveryFee: 0, tipAmount: 0 });
 
-    const { useCase } = build(shortRun);
+    const { useCase } = build(freeRun);
 
     const result = await useCase.execute('order-1', { code: '4821' }, RIDER);
 
-    expect(result.earned).toBe(80);
+    expect(result.earned).toBe(0);
+    expect(result.breakdown).toEqual([]);
   });
 });

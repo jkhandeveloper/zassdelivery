@@ -128,7 +128,7 @@ export class GetRestaurantUseCase {
     const restaurant = await this.restaurants.findBySlug(slug);
 
     if (!restaurant || restaurant.status !== RestaurantStatus.ACTIVE) {
-      throw new ResourceNotFoundException('Restaurant', slug);
+      throw new ResourceNotFoundException('Business', slug);
     }
 
     return toRestaurantDto(restaurant, {
@@ -144,7 +144,7 @@ export class GetRestaurantUseCase {
     const restaurant = await this.restaurants.findById(id, true);
 
     if (!restaurant) {
-      throw new ResourceNotFoundException('Restaurant', id);
+      throw new ResourceNotFoundException('Business', id);
     }
 
     assertCanManage(restaurant, actor);
@@ -215,7 +215,7 @@ export class RegisterRestaurantUseCase {
   async execute(ownerId: string, dto: RegisterRestaurantDto): Promise<RestaurantAdminDto> {
     if ((await this.restaurants.countForOwner(ownerId)) >= MAX_RESTAURANTS_PER_OWNER) {
       throw new BusinessRuleViolationException(
-        `An owner may list at most ${MAX_RESTAURANTS_PER_OWNER} restaurants.`,
+        `An owner may list at most ${MAX_RESTAURANTS_PER_OWNER} businesses.`,
       );
     }
 
@@ -284,7 +284,7 @@ export class RegisterRestaurantUseCase {
     }
 
     throw new ResourceConflictException(
-      'Could not generate a unique address for this restaurant name.',
+      'Could not generate a unique address for this business name.',
     );
   }
 }
@@ -305,7 +305,7 @@ export class UpdateRestaurantUseCase {
     const existing = await this.restaurants.findById(id);
 
     if (!existing) {
-      throw new ResourceNotFoundException('Restaurant', id);
+      throw new ResourceNotFoundException('Business', id);
     }
 
     assertCanManage(existing, actor);
@@ -350,7 +350,7 @@ export class DeleteRestaurantUseCase {
     const existing = await this.restaurants.findById(id);
 
     if (!existing) {
-      throw new ResourceNotFoundException('Restaurant', id);
+      throw new ResourceNotFoundException('Business', id);
     }
 
     assertCanManage(existing, actor);
@@ -359,7 +359,7 @@ export class DeleteRestaurantUseCase {
     // resolving for order history and payouts.
     await this.restaurants.softDelete(id);
 
-    return { message: 'Restaurant removed.' };
+    return { message: 'Business removed.' };
   }
 }
 
@@ -392,18 +392,18 @@ export function assertCanManage(
     // 404 rather than 403 for another vendor's restaurant: confirming that an
     // id exists is itself a disclosure.
     if (actor.staffRestaurantId !== restaurant.id) {
-      throw new ResourceNotFoundException('Restaurant');
+      throw new ResourceNotFoundException('Business');
     }
     return;
   }
 
   if (actor.role !== UserRole.VENDOR_OWNER) {
-    throw new ForbiddenOperationException('Only a vendor may manage a restaurant.');
+    throw new ForbiddenOperationException('Only a vendor may manage a business.');
   }
 
   // 404 rather than 403 for someone else's restaurant: confirming that an id
   // exists is itself a disclosure.
   if (restaurant.ownerId !== actor.id) {
-    throw new ResourceNotFoundException('Restaurant');
+    throw new ResourceNotFoundException('Business');
   }
 }

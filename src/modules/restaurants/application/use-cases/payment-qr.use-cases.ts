@@ -35,7 +35,7 @@ export class SetRestaurantPaymentQrCodesUseCase {
     const existing = await this.restaurants.findById(id);
 
     if (!existing) {
-      throw new ResourceNotFoundException('Restaurant', id);
+      throw new ResourceNotFoundException('Business', id);
     }
 
     assertCanManage(existing, actor);

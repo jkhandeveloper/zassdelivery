@@ -225,7 +225,7 @@ export class UpdateMenuItemUseCase {
 
       if (!menu || menu.restaurantId !== existing.restaurantId) {
         throw new BusinessRuleViolationException(
-          'A dish can only be moved to a section of the same restaurant.',
+          'A dish can only be moved to a section of the same business.',
         );
       }
     }

@@ -82,7 +82,7 @@ export class PaymentsController {
       'Read this rather than hard-coding a list: a gateway whose credentials ' +
       'are missing reports itself unavailable here, so the checkout screen can ' +
       'grey it out instead of failing after the customer commits to paying. ' +
-      'Pass restaurantId to learn whether that restaurant takes scan-to-pay.',
+      'Pass restaurantId to learn whether that business takes scan-to-pay.',
   })
   @ApiResponse({ status: 200, type: [GatewayAvailabilityDto] })
   methods(@Query() query: ListPaymentMethodsQueryDto): Promise<GatewayAvailabilityDto[]> {
@@ -120,7 +120,7 @@ export class PaymentsController {
   @ApiOperation({
     summary: 'The QR codes that pay for an order',
     description:
-      'The restaurant’s scan-to-pay codes, and the rider’s once one has the order, ' +
+      'The business’s scan-to-pay codes, and the rider’s once one has the order, ' +
       'with the amount and payment state. Poll while the payment is pending: it ' +
       'turns PAID when the payee confirms the transfer. Customer and staff only.',
   })
@@ -138,7 +138,7 @@ export class PaymentsController {
   @ApiOperation({
     summary: 'Confirm a scanned-QR payment arrived',
     description:
-      'For the restaurant or the rider carrying the order, once the transfer shows ' +
+      'For the business or the rider carrying the order, once the transfer shows ' +
       'in their JazzCash, Easypaisa or bank app — there is no gateway to confirm it ' +
       'for them. Works for scan-to-pay orders and for cash orders the customer paid ' +
       'by QR instead. The transaction ID is optional, but one ID can confirm one order only.',

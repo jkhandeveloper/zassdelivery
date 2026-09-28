@@ -50,7 +50,7 @@ export class OrderNotificationsListener {
       {
         userId: event.customerId,
         title: `Order ${event.orderNumber} is with ${event.restaurantName}`,
-        body: 'We have sent it to the restaurant. You will hear from us as soon as they accept it.',
+        body: 'We have sent it to the business. You will hear from us as soon as they accept it.',
       },
       {
         userId: event.restaurantOwnerId,
@@ -152,7 +152,7 @@ export class OrderNotificationsListener {
       {
         userId: event.customerId,
         title: `Order ${event.orderNumber} ${ended}`,
-        body: `Your order with ${event.restaurantName} ${ended}. If you already paid, the restaurant will return your money.`,
+        body: `Your order with ${event.restaurantName} ${ended}. If you already paid, the business will return your money.`,
         push: true,
       },
       {

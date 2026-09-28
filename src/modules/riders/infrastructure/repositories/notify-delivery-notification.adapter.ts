@@ -56,7 +56,7 @@ export class NotifyDeliveryNotificationAdapter extends DeliveryNotificationPort 
       userId: input.customerId,
       type: NotificationType.ORDER_UPDATE,
       title: `${input.riderName} is bringing your order`,
-      body: `${input.riderName} has accepted order ${input.orderNumber} and is heading to the restaurant.`,
+      body: `${input.riderName} has accepted order ${input.orderNumber} and is heading to the business.`,
       data: {
         orderId: input.orderId,
         riderName: input.riderName,

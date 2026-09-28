@@ -447,7 +447,7 @@ export class RefundOrderUseCase {
 
     if (as !== ActorType.RESTAURANT) {
       throw new ForbiddenOperationException(
-        'Refunds are made by the restaurant, which received the payment.',
+        'Refunds are made by the business, which received the payment.',
       );
     }
 

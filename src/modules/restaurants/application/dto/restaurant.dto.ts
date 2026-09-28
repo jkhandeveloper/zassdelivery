@@ -103,7 +103,7 @@ export class RegisterRestaurantDto {
   })
   @IsArray()
   @ArrayMinSize(1, { message: 'at least one category is required' })
-  @ArrayMaxSize(5, { message: 'a restaurant may belong to at most 5 categories' })
+  @ArrayMaxSize(5, { message: 'a business may belong to at most 5 categories' })
   @ArrayUnique()
   @IsString({ each: true })
   categoryIds!: string[];
@@ -142,7 +142,7 @@ export class RegisterRestaurantDto {
   avgPreparationMinutes?: number;
 
   @ApiPropertyOptional({
-    description: 'How far this restaurant will deliver from its own door, in metres.',
+    description: 'How far this business will deliver from its own door, in metres.',
     example: 5000,
     minimum: 100,
     maximum: 50000,

@@ -49,7 +49,7 @@ export class OrderTimelineEntryDto {
   @ApiPropertyOptional({ nullable: true, enum: OrderStatus }) fromStatus!: OrderStatus | null;
   @ApiProperty({ enum: OrderStatus }) toStatus!: OrderStatus;
   @ApiProperty({ enum: ActorType }) actor!: ActorType;
-  @ApiProperty({ example: 'Accepted by restaurant' }) label!: string;
+  @ApiProperty({ example: 'Accepted by business' }) label!: string;
   @ApiPropertyOptional({ nullable: true }) note!: string | null;
   @ApiProperty() at!: Date;
 }
@@ -88,7 +88,7 @@ export class OrderDto {
   @ApiProperty({ enum: PaymentStatus }) paymentStatus!: PaymentStatus;
   @ApiProperty({
     example: 0,
-    description: 'Already returned to the customer by the restaurant.',
+    description: 'Already returned to the customer by the business.',
   })
   refundedAmount!: number;
   @ApiPropertyOptional({ nullable: true, example: 'ZASS100' }) couponCode!: string | null;

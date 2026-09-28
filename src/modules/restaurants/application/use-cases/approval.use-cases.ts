@@ -38,12 +38,12 @@ const ALLOWED_TRANSITIONS: Record<RestaurantStatus, RestaurantStatus[]> = {
 
 function assertTransition(from: RestaurantStatus, to: RestaurantStatus): void {
   if (from === to) {
-    throw new BusinessRuleViolationException(`The restaurant is already ${from}.`);
+    throw new BusinessRuleViolationException(`The business is already ${from}.`);
   }
 
   if (!ALLOWED_TRANSITIONS[from].includes(to)) {
     throw new BusinessRuleViolationException(
-      `A restaurant cannot move from ${from} to ${to}. Allowed: ${ALLOWED_TRANSITIONS[from].join(', ') || 'none'}.`,
+      `A business cannot move from ${from} to ${to}. Allowed: ${ALLOWED_TRANSITIONS[from].join(', ') || 'none'}.`,
     );
   }
 }
@@ -59,7 +59,7 @@ export class ApproveRestaurantUseCase {
     const existing = await this.restaurants.findById(id, true);
 
     if (!existing) {
-      throw new ResourceNotFoundException('Restaurant', id);
+      throw new ResourceNotFoundException('Business', id);
     }
 
     assertTransition(existing.status, RestaurantStatus.ACTIVE);
@@ -70,7 +70,7 @@ export class ApproveRestaurantUseCase {
 
     if (hours.length === 0 || hours.every((hour) => hour.isClosed)) {
       throw new BusinessRuleViolationException(
-        'Business hours must be set before this restaurant can be approved.',
+        'Business hours must be set before this business can be approved.',
       );
     }
 
@@ -104,7 +104,7 @@ export class RejectRestaurantUseCase {
     const existing = await this.restaurants.findById(id, true);
 
     if (!existing) {
-      throw new ResourceNotFoundException('Restaurant', id);
+      throw new ResourceNotFoundException('Business', id);
     }
 
     assertTransition(existing.status, RestaurantStatus.REJECTED);
@@ -127,7 +127,7 @@ export class ResubmitRestaurantUseCase {
     const existing = await this.restaurants.findById(id, true);
 
     if (!existing) {
-      throw new ResourceNotFoundException('Restaurant', id);
+      throw new ResourceNotFoundException('Business', id);
     }
 
     assertCanManage(existing, actor);
@@ -152,7 +152,7 @@ export class ChangeRestaurantStatusUseCase {
     const existing = await this.restaurants.findById(id, true);
 
     if (!existing) {
-      throw new ResourceNotFoundException('Restaurant', id);
+      throw new ResourceNotFoundException('Business', id);
     }
 
     assertTransition(existing.status, dto.status);
@@ -182,14 +182,14 @@ export class SetAcceptingOrdersUseCase {
     const existing = await this.restaurants.findById(id);
 
     if (!existing) {
-      throw new ResourceNotFoundException('Restaurant', id);
+      throw new ResourceNotFoundException('Business', id);
     }
 
     assertCanManage(existing, actor);
 
     if (existing.status !== RestaurantStatus.ACTIVE && dto.isAcceptingOrders) {
       throw new BusinessRuleViolationException(
-        `A restaurant that is ${existing.status} cannot start accepting orders.`,
+        `A business that is ${existing.status} cannot start accepting orders.`,
       );
     }
 

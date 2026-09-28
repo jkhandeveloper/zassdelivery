@@ -38,7 +38,7 @@ const REDACTED = [
 /** Path segment → the entity a change is about. */
 const ENTITY_BY_SEGMENT: Record<string, string> = {
   users: 'User',
-  'restaurant-management': 'Restaurant',
+  'restaurant-management': 'Business',
   'menu-management': 'MenuItem',
   'order-management': 'Order',
   'rider-management': 'Rider',

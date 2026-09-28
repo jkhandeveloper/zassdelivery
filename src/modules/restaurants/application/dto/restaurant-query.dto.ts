@@ -45,7 +45,7 @@ export type RestaurantSortField = (typeof RESTAURANT_SORT_FIELDS)[number];
 
 export class SearchRestaurantsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
-    description: 'Free-text search over the restaurant name, backed by a trigram index.',
+    description: 'Free-text search over the business name, backed by a trigram index.',
     example: 'kabab',
   })
   declare search?: string;
@@ -102,7 +102,7 @@ export class SearchRestaurantsQueryDto extends PaginationQueryDto {
   minRating?: number;
 
   @ApiPropertyOptional({
-    description: 'Only restaurants currently accepting orders.',
+    description: 'Only businesses currently accepting orders.',
     default: false,
   })
   @IsOptional()
@@ -113,7 +113,7 @@ export class SearchRestaurantsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
     description:
       'Customer latitude. When supplied with longitude, results are limited to ' +
-      'restaurants whose delivery radius reaches this point.',
+      'businesses whose delivery radius reaches this point.',
     example: 34.0091,
   })
   @IsOptional()

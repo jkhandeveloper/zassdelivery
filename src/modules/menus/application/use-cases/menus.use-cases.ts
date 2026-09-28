@@ -42,7 +42,7 @@ export class MenuOwnershipGuardService {
     const restaurant = await this.restaurants.findById(restaurantId, true);
 
     if (!restaurant) {
-      throw new ResourceNotFoundException('Restaurant', restaurantId);
+      throw new ResourceNotFoundException('Business', restaurantId);
     }
 
     assertCanManage(restaurant, actor);
@@ -95,9 +95,7 @@ export class CreateMenuUseCase {
     await this.ownership.assertRestaurant(restaurantId, actor);
 
     if (await this.menus.nameExists(restaurantId, dto.name)) {
-      throw new ResourceConflictException(
-        `This restaurant already has a menu named "${dto.name}".`,
-      );
+      throw new ResourceConflictException(`This business already has a menu named "${dto.name}".`);
     }
 
     return toMenuDto(await this.menus.create(restaurantId, dto));
@@ -121,9 +119,7 @@ export class UpdateMenuUseCase {
     await this.ownership.assertRestaurant(menu.restaurantId, actor);
 
     if (dto.name && (await this.menus.nameExists(menu.restaurantId, dto.name, menuId))) {
-      throw new ResourceConflictException(
-        `This restaurant already has a menu named "${dto.name}".`,
-      );
+      throw new ResourceConflictException(`This business already has a menu named "${dto.name}".`);
     }
 
     return toMenuDto(await this.menus.update(menuId, dto));

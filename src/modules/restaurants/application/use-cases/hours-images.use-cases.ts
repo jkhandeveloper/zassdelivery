@@ -38,7 +38,7 @@ export class GetBusinessHoursUseCase {
     const restaurant = await this.restaurants.findById(restaurantId);
 
     if (!restaurant) {
-      throw new ResourceNotFoundException('Restaurant', restaurantId);
+      throw new ResourceNotFoundException('Business', restaurantId);
     }
 
     const hours = await this.restaurants.findHours(restaurantId);
@@ -59,7 +59,7 @@ export class SetBusinessHoursUseCase {
     const restaurant = await this.restaurants.findById(restaurantId, true);
 
     if (!restaurant) {
-      throw new ResourceNotFoundException('Restaurant', restaurantId);
+      throw new ResourceNotFoundException('Business', restaurantId);
     }
 
     assertCanManage(restaurant, actor);
@@ -110,7 +110,7 @@ export class ListRestaurantImagesUseCase {
     const restaurant = await this.restaurants.findById(restaurantId);
 
     if (!restaurant) {
-      throw new ResourceNotFoundException('Restaurant', restaurantId);
+      throw new ResourceNotFoundException('Business', restaurantId);
     }
 
     return (await this.restaurants.findImages(restaurantId)).map(toImageDto);
@@ -129,7 +129,7 @@ export class AddRestaurantImageUseCase {
     const restaurant = await this.restaurants.findById(restaurantId, true);
 
     if (!restaurant) {
-      throw new ResourceNotFoundException('Restaurant', restaurantId);
+      throw new ResourceNotFoundException('Business', restaurantId);
     }
 
     assertCanManage(restaurant, actor);
@@ -138,7 +138,7 @@ export class AddRestaurantImageUseCase {
 
     if (count >= MAX_IMAGES_PER_RESTAURANT) {
       throw new BusinessRuleViolationException(
-        `A restaurant may have at most ${MAX_IMAGES_PER_RESTAURANT} images. Delete one to add another.`,
+        `A business may have at most ${MAX_IMAGES_PER_RESTAURANT} images. Delete one to add another.`,
       );
     }
 
@@ -165,7 +165,7 @@ export class DeleteRestaurantImageUseCase {
     const restaurant = await this.restaurants.findById(restaurantId, true);
 
     if (!restaurant) {
-      throw new ResourceNotFoundException('Restaurant', restaurantId);
+      throw new ResourceNotFoundException('Business', restaurantId);
     }
 
     assertCanManage(restaurant, actor);
@@ -196,7 +196,7 @@ export class ReorderRestaurantImagesUseCase {
     const restaurant = await this.restaurants.findById(restaurantId, true);
 
     if (!restaurant) {
-      throw new ResourceNotFoundException('Restaurant', restaurantId);
+      throw new ResourceNotFoundException('Business', restaurantId);
     }
 
     assertCanManage(restaurant, actor);
@@ -216,7 +216,7 @@ export class ReorderRestaurantImagesUseCase {
 
     if (unknown.length > 0) {
       throw new BusinessRuleViolationException(
-        `These images do not belong to this restaurant: ${unknown.join(', ')}.`,
+        `These images do not belong to this business: ${unknown.join(', ')}.`,
       );
     }
 

@@ -28,7 +28,7 @@ export class UserDto {
 
   @ApiPropertyOptional({
     nullable: true,
-    description: 'Set only for VENDOR_STAFF: the restaurant this account works for.',
+    description: 'Set only for VENDOR_STAFF: the business this account works for.',
   })
   staffRestaurantId?: string | null;
 

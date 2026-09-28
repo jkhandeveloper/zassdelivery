@@ -72,7 +72,7 @@ export class AdminDashboardController {
 
   @Get('reports/restaurants')
   @RequirePermissions('analytics.read')
-  @ApiOperation({ summary: 'Best-performing restaurants', description: 'By revenue.' })
+  @ApiOperation({ summary: 'Best-performing businesses', description: 'By revenue.' })
   @ApiResponse({ status: 200, type: [LeaderboardRowDto] })
   topRestaurants(@Query() query: LeaderboardQueryDto): Promise<LeaderboardRowDto[]> {
     return this.leaderboard.restaurants(query);

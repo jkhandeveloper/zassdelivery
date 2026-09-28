@@ -85,7 +85,7 @@ export class RestaurantApprovedListener {
       });
     } catch (error) {
       this.logger.error?.(
-        `Could not open a subscription for restaurant ${payload.restaurantId}: ${(error as Error).message}`,
+        `Could not open a subscription for business ${payload.restaurantId}: ${(error as Error).message}`,
         this.context,
       );
     }

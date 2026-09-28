@@ -46,12 +46,12 @@ export class PlaceOrderDto {
     default: PaymentMethod.CASH_ON_DELIVERY,
     description:
       'Cash settles here and the order goes straight to the ' +
-      'restaurant. JazzCash and Easypaisa hold the order in PENDING_PAYMENT ' +
+      'business. JazzCash and Easypaisa hold the order in PENDING_PAYMENT ' +
       'until the money lands — start the payment with ' +
       'POST /payments/orders/{orderId}/checkout and send the customer to the gateway. ' +
-      'QR_TRANSFER also goes straight to the restaurant, with the payment pending ' +
-      'until the restaurant or rider confirms the transfer arrived; it is refused ' +
-      'for a restaurant that has no QR codes.',
+      'QR_TRANSFER also goes straight to the business, with the payment pending ' +
+      'until the business or rider confirms the transfer arrived; it is refused ' +
+      'for a business that has no QR codes.',
   })
   @IsOptional()
   @IsIn(CUSTOMER_PAYMENT_METHODS, {
@@ -70,7 +70,7 @@ export class PlaceOrderDto {
 export class CancelOrderDto {
   @ApiPropertyOptional({
     example: 'Ordered by mistake',
-    description: 'Recorded on the order and shown to the restaurant.',
+    description: 'Recorded on the order and shown to the business.',
     maxLength: 300,
   })
   @IsOptional()
@@ -173,7 +173,7 @@ export class ListOrdersQueryDto extends PaginationQueryDto {
 
 /** Staff listing: adds cross-tenant filters. */
 export class ListOrdersAdminQueryDto extends ListOrdersQueryDto {
-  @ApiPropertyOptional({ description: 'Filter by restaurant.' })
+  @ApiPropertyOptional({ description: 'Filter by business.' })
   @IsOptional()
   @IsString()
   restaurantId?: string;

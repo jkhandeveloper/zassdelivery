@@ -97,7 +97,7 @@ export class RegisterDto {
   @ApiPropertyOptional({
     description:
       'Self-service registration is limited to CUSTOMER, RIDER and ' +
-      'VENDOR_OWNER. A vendor registering here still needs a restaurant ' +
+      'VENDOR_OWNER. A vendor registering here still needs a business ' +
       'approved by a super admin (POST /restaurant-management, then ' +
       'POST /restaurant-management/:id/approve) before it goes live. ' +
       'VENDOR_STAFF accounts are created by the vendor owner, not through ' +

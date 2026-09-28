@@ -132,7 +132,7 @@ describe('ListGatewaysUseCase', () => {
     ]);
   });
 
-  it('offers scan-to-pay only for a restaurant that has put up a QR code', async () => {
+  it('offers scan-to-pay only for a business that has put up a QR code', async () => {
     const restaurants = {
       findById: jest.fn().mockImplementation((id: string) =>
         Promise.resolve({

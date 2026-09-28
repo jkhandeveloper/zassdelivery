@@ -40,12 +40,12 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, TransitionRule[]> = {
     {
       to: OrderStatus.CONFIRMED,
       actors: [ActorType.RESTAURANT, ActorType.ADMIN],
-      label: 'Accepted by restaurant',
+      label: 'Accepted by business',
     },
     {
       to: OrderStatus.REJECTED,
       actors: [ActorType.RESTAURANT, ActorType.ADMIN],
-      label: 'Rejected by restaurant',
+      label: 'Rejected by business',
     },
     {
       to: OrderStatus.CANCELLED,
@@ -217,7 +217,7 @@ export class OrderStateMachine {
       return {
         allowed: false,
         reason:
-          'The restaurant has already started preparing this order. Contact support if you need to cancel.',
+          'The business has already started preparing this order. Contact support if you need to cancel.',
       };
     }
 
@@ -241,7 +241,7 @@ export class OrderStateMachine {
   static describe(status: OrderStatus): string {
     const text: Record<OrderStatus, string> = {
       [OrderStatus.PENDING_PAYMENT]: 'Waiting for payment',
-      [OrderStatus.PLACED]: 'Sent to the restaurant',
+      [OrderStatus.PLACED]: 'Sent to the business',
       [OrderStatus.CONFIRMED]: 'Accepted — preparing shortly',
       [OrderStatus.PREPARING]: 'Being prepared',
       [OrderStatus.READY_FOR_PICKUP]: 'Ready — waiting for a rider',
@@ -249,7 +249,7 @@ export class OrderStateMachine {
       [OrderStatus.ON_THE_WAY]: 'On the way to you',
       [OrderStatus.DELIVERED]: 'Delivered',
       [OrderStatus.CANCELLED]: 'Cancelled',
-      [OrderStatus.REJECTED]: 'Rejected by the restaurant',
+      [OrderStatus.REJECTED]: 'Rejected by the business',
       [OrderStatus.FAILED]: 'Delivery failed',
     };
 

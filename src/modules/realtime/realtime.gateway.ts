@@ -220,7 +220,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       return this.reject(
         socket,
         Rooms.restaurant(restaurantId),
-        'That restaurant is not available to you.',
+        'That business is not available to you.',
       );
     }
 

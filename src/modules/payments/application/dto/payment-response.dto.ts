@@ -80,7 +80,7 @@ export class CheckoutDto {
     description:
       'REDIRECT — send the customer to the gateway. SETTLED — paid already, ' +
       'nothing more to do. ON_DELIVERY — the rider collects the cash. SCAN_QR — ' +
-      'show the restaurant’s QR codes; the restaurant confirms when the money arrives.',
+      'show the business’s QR codes; the business confirms when the money arrives.',
   })
   action!: 'REDIRECT' | 'SETTLED' | 'ON_DELIVERY' | 'SCAN_QR';
 
@@ -95,7 +95,7 @@ export class CheckoutDto {
 
   @ApiPropertyOptional({
     type: [PaymentQrCodeDto],
-    description: 'Present only when action is SCAN_QR: the restaurant’s codes to scan.',
+    description: 'Present only when action is SCAN_QR: the business’s codes to scan.',
   })
   qrCodes?: PaymentQrCodeDto[];
 }

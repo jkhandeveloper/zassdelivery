@@ -61,7 +61,7 @@ export class SearchController {
   @ApiOperation({
     summary: 'Global search',
     description:
-      'Restaurants, dishes and categories in one call, five of each — the ' +
+      'Businesses, dishes and categories in one call, five of each — the ' +
       'combined results screen. The three queries run concurrently.',
   })
   @ApiResponse({ status: 200, type: GlobalSearchDto })
@@ -71,12 +71,12 @@ export class SearchController {
 
   @Get('restaurants')
   @ApiOperation({
-    summary: 'Search restaurants',
+    summary: 'Search businesses',
     description:
       'PostgreSQL full-text search over name and description, ranked with ' +
       'ts_rank and weighted so a name match outranks a description match. ' +
       'Accepts quoted phrases and negation, e.g. `"chapli kabab" -pizza`. ' +
-      'Supply coordinates to limit results to restaurants that can actually ' +
+      'Supply coordinates to limit results to businesses that can actually ' +
       'deliver there.',
   })
   @ApiPaginatedResponse(RestaurantHitDto)
@@ -88,10 +88,10 @@ export class SearchController {
 
   @Get('food')
   @ApiOperation({
-    summary: 'Search dishes across restaurants',
+    summary: 'Search dishes across businesses',
     description:
       'Full-text search over dish names and descriptions. Only available dishes ' +
-      'from live restaurants are returned.',
+      'from live businesses are returned.',
   })
   @ApiPaginatedResponse(FoodHitDto)
   searchFood(@Query() query: SearchFoodDto): Promise<PaginatedResult<FoodHitDto>> {
@@ -101,7 +101,7 @@ export class SearchController {
   @Get('categories')
   @ApiOperation({
     summary: 'Search cuisine categories',
-    description: 'Ordered by how many active restaurants each one holds.',
+    description: 'Ordered by how many active businesses each one holds.',
   })
   @ApiResponse({ status: 200, type: [CategoryHitDto] })
   searchCategories(@Query() query: SearchCategoriesDto): Promise<CategoryHitDto[]> {
@@ -110,9 +110,9 @@ export class SearchController {
 
   @Get('nearby')
   @ApiOperation({
-    summary: 'Restaurants that deliver to a location',
+    summary: 'Businesses that deliver to a location',
     description:
-      'Nearest first. The radius is capped by each restaurant’s own delivery ' +
+      'Nearest first. The radius is capped by each business’s own delivery ' +
       'radius, so a result here can genuinely serve the address.',
   })
   @ApiPaginatedResponse(RestaurantHitDto)
@@ -122,7 +122,7 @@ export class SearchController {
 
   @Get('trending')
   @ApiOperation({
-    summary: 'Trending restaurants',
+    summary: 'Trending businesses',
     description:
       'Ranked by delivered orders inside a rolling window (7 days by default), ' +
       'so newly popular places can surface rather than the same long-established ' +
@@ -150,7 +150,7 @@ export class SearchController {
   @ApiOperation({
     summary: 'Type-ahead suggestions',
     description:
-      'Restaurants, dishes and categories matched on trigram similarity rather ' +
+      'Businesses, dishes and categories matched on trigram similarity rather ' +
       'than full text: a half-typed word is not a lexeme, and trigrams tolerate ' +
       'the typos a phone keyboard produces. Exact prefixes score 1 and rank first.',
   })

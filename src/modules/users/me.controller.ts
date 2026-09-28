@@ -242,7 +242,7 @@ export class MeController {
 
   @Delete('favorites/restaurants/:restaurantId')
   @ApiParam({ name: 'restaurantId' })
-  @ApiOperation({ summary: 'Remove a restaurant from my favorites' })
+  @ApiOperation({ summary: 'Remove a business from my favorites' })
   @ApiResponse({ status: 200, type: MessageResponseDto })
   unfavoriteRestaurant(
     @CurrentUser('id') userId: string,

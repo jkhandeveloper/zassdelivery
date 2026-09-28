@@ -20,6 +20,7 @@ const ORDER_CONTEXT = {
     status: true,
     type: true,
     totalAmount: true,
+    deliveryFee: true,
     tipAmount: true,
     paymentMethod: true,
     paymentStatus: true,

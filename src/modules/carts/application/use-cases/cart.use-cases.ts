@@ -334,7 +334,7 @@ export class ApplyCouponUseCase {
     }
 
     if (coupon.restaurantId !== null && coupon.restaurantId !== cart.restaurantId) {
-      throw new BusinessRuleViolationException('This coupon cannot be used at this restaurant.');
+      throw new BusinessRuleViolationException('This coupon cannot be used at this business.');
     }
 
     if (coupon.zoneId !== null && cart.address !== null && coupon.zoneId !== cart.address.zoneId) {

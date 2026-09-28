@@ -7,7 +7,7 @@ import { IsOptional, IsString, ValidateIf } from 'class-validator';
  */
 export class CreateFavoriteDto {
   @ApiPropertyOptional({
-    description: 'Restaurant to favorite. Provide this or menuItemId, not both.',
+    description: 'Business to favorite. Provide this or menuItemId, not both.',
     example: 'clx8f2k9a0000zo79b1h2c3d4',
   })
   @ValidateIf((dto: CreateFavoriteDto) => !dto.menuItemId)

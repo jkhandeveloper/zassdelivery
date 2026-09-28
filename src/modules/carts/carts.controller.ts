@@ -79,7 +79,7 @@ export class CartsController {
   @ApiOperation({
     summary: 'Add an item',
     description:
-      'Adding a dish from a different restaurant replaces the basket — a single ' +
+      'Adding a dish from a different business replaces the basket — a single ' +
       'order cannot span two kitchens. Identical selections merge into the ' +
       'existing line rather than stacking duplicates. Option-group rules ' +
       '(min/max selections) are enforced here.',
@@ -158,7 +158,7 @@ export class CartsController {
     summary: 'Set the delivery address',
     description:
       'Drives the delivery fee and ETA. Must be one of your own saved addresses, ' +
-      'and within the restaurant’s delivery radius.',
+      'and within the business’s delivery radius.',
   })
   @ApiResponse({ status: 200, type: CartDto })
   @ApiResponse({ status: 404, description: 'No such address of yours.' })

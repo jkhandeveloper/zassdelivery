@@ -319,9 +319,11 @@ enum AssignmentStatus {
 }
 
 enum DriverEarningType {
-  /// Flat amount paid for taking the run at all.
+  /// The delivery fee the customer paid, kept by the rider in full.
+  DELIVERY_FEE
+  /// Legacy: flat amount from the old platform-paid fare.
   BASE_FARE
-  /// Per-kilometre component.
+  /// Legacy: per-kilometre component of the old platform-paid fare.
   DISTANCE
   TIP
   BONUS
@@ -330,23 +332,14 @@ enum DriverEarningType {
   @@map("driver_earning_type")
 }
 
-enum PayoutStatus {
-  /// Requested by the rider; the amount is already held out of their wallet.
-  PENDING
-  APPROVED
-  PAID
-  REJECTED
-  CANCELLED
+/// Which way money moved when a rider and a restaurant settled up.
+enum RiderSettlementDirection {
+  /// The rider handed over order money they collected from customers.
+  RIDER_TO_RESTAURANT
+  /// The restaurant paid the rider delivery fees it owed them.
+  RESTAURANT_TO_RIDER
 
-  @@map("payout_status")
-}
-
-enum PayoutMethod {
-  BANK_TRANSFER
-  JAZZCASH
-  EASYPAISA
-
-  @@map("payout_method")
+  @@map("rider_settlement_direction")
 }
 
 enum DevicePlatform {
@@ -554,7 +547,7 @@ model User {
   driversApproved         Driver[]                 @relation("DriverApprover")
   driverDocumentsReviewed DriverDocument[]         @relation("DriverDocumentReviewer")
   assignmentsDispatched   DeliveryAssignment[]     @relation("AssignmentDispatcher")
-  payoutsProcessed        PayoutRequest[]          @relation("PayoutProcessor")
+  riderSettlementsLogged  RiderSettlement[]        @relation("RiderSettlementRecorder")
   subscriptions           VendorSubscription[]     @relation("SubscriptionOwner")
   invoicesSubmitted       SubscriptionInvoice[]    @relation("InvoiceSubmitter")
   invoicesConfirmed       SubscriptionInvoice[]    @relation("InvoiceConfirmer")
@@ -862,28 +855,30 @@ model Restaurant {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  owner        User                           @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  approvedBy   User?                          @relation("RestaurantApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  city         City                           @relation(fields: [cityId], references: [id], onDelete: Restrict)
-  zone         Zone                           @relation(fields: [zoneId], references: [id], onDelete: Restrict)
-  categories   RestaurantCategoryAssignment[]
-  images       RestaurantImage[]
-  hours        RestaurantHour[]
-  menus        Menu[]
-  menuItems    MenuItem[]
-  orders       Order[]
-  reviews      Review[]
-  favorites    Favorite[]
-  coupons      Coupon[]
-  banners      Banner[]
-  staffMembers User[]                         @relation("RestaurantStaff")
+  owner            User                           @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  approvedBy       User?                          @relation("RestaurantApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  city             City                           @relation(fields: [cityId], references: [id], onDelete: Restrict)
+  zone             Zone                           @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  categories       RestaurantCategoryAssignment[]
+  images           RestaurantImage[]
+  hours            RestaurantHour[]
+  menus            Menu[]
+  menuItems        MenuItem[]
+  orders           Order[]
+  reviews          Review[]
+  favorites        Favorite[]
+  coupons          Coupon[]
+  banners          Banner[]
+  staffMembers     User[]                         @relation("RestaurantStaff")
   /// Full-text search vector, maintained by Postgres as a generated column.
   /// Declared here so migrations do not propose dropping it; it is never read
   /// through the Prisma client, only through raw SQL in the search repository.
-  searchVector Unsupported("tsvector")?       @map("search_vector")
-  carts        Cart[]
-  subscription VendorSubscription?
-  invoices     SubscriptionInvoice[]
+  searchVector     Unsupported("tsvector")?       @map("search_vector")
+  carts            Cart[]
+  subscription     VendorSubscription?
+  invoices         SubscriptionInvoice[]
+  riderLedger      RiderLedgerEntry[]
+  riderSettlements RiderSettlement[]
 
   @@index([cityId, status])
   @@index([zoneId, status])
@@ -1148,7 +1143,7 @@ model Driver {
   ratingCount     Int     @default(0) @map("rating_count")
   totalDeliveries Int     @default(0) @map("total_deliveries")
 
-  /// Payout destination for driver earnings.
+  /// Bank account a restaurant can pay the rider's delivery fees into.
   payoutBankName      String? @map("payout_bank_name") @db.VarChar(120)
   payoutAccountTitle  String? @map("payout_account_title") @db.VarChar(120)
   payoutAccountNumber String? @map("payout_account_number") @db.VarChar(40)
@@ -1160,16 +1155,17 @@ model Driver {
   updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  approvedBy     User?                @relation("DriverApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  zone           Zone?                @relation(fields: [zoneId], references: [id], onDelete: SetNull)
-  vehicles       Vehicle[]
-  orders         Order[]
-  reviews        Review[]
-  documents      DriverDocument[]
-  assignments    DeliveryAssignment[]
-  earnings       DriverEarning[]
-  payoutRequests PayoutRequest[]
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy    User?                @relation("DriverApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  zone          Zone?                @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  vehicles      Vehicle[]
+  orders        Order[]
+  reviews       Review[]
+  documents     DriverDocument[]
+  assignments   DeliveryAssignment[]
+  earnings      DriverEarning[]
+  ledgerEntries RiderLedgerEntry[]
+  settlements   RiderSettlement[]
 
   @@index([status, availability])
   @@index([zoneId, availability])
@@ -1281,42 +1277,60 @@ model DriverEarning {
   @@map("driver_earnings")
 }
 
-/// A rider's request to move wallet money to their bank or mobile account.
+/// What one delivered order left a rider and its restaurant owing each other.
 ///
-/// The amount leaves the wallet the moment the request is made, so it cannot be
-/// spent twice while an operator is still looking at it; rejecting or
-/// cancelling the request puts it back.
-model PayoutRequest {
-  id        String @id @default(cuid())
-  /// Human-readable reference quoted in support conversations, e.g. "WDR-260809-0001".
-  reference String @unique @db.VarChar(40)
+/// The platform never holds order money. The rider keeps the delivery fee and
+/// tip. When the rider collected the payment (cash, or a transfer to their own
+/// QR), they owe the restaurant the rest. When the restaurant was paid
+/// directly, the restaurant owes the rider their fee. One row per order, so a
+/// retried delivery confirmation cannot count twice.
+model RiderLedgerEntry {
+  id           String @id @default(cuid())
+  driverId     String @map("driver_id")
+  restaurantId String @map("restaurant_id")
+  orderId      String @unique @map("order_id")
 
-  driverId String       @map("driver_id")
-  amount   Decimal      @db.Decimal(12, 2)
-  method   PayoutMethod
-  status   PayoutStatus @default(PENDING)
-
-  // Snapshot of the destination. The rider may edit their payout details
-  // later; where this transfer actually went must not change with them.
-  bankName      String? @map("bank_name") @db.VarChar(120)
-  accountTitle  String  @map("account_title") @db.VarChar(120)
-  accountNumber String  @map("account_number") @db.VarChar(40)
-
-  processedById    String?   @map("processed_by_id")
-  processedAt      DateTime? @map("processed_at") @db.Timestamptz(3)
-  rejectionReason  String?   @map("rejection_reason") @db.VarChar(300)
-  /// Bank or gateway reference once the money has actually moved.
-  paymentReference String?   @map("payment_reference") @db.VarChar(120)
+  /// Money the rider took from the customer. Zero when the restaurant was paid.
+  collectedAmount Decimal @map("collected_amount") @db.Decimal(10, 2)
+  /// Delivery fee plus tip: what the rider keeps for the run.
+  riderFee        Decimal @map("rider_fee") @db.Decimal(10, 2)
+  /// collectedAmount - riderFee. Positive: the rider owes the restaurant.
+  /// Negative: the restaurant owes the rider.
+  netAmount       Decimal @map("net_amount") @db.Decimal(10, 2)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  driver      Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  processedBy User?  @relation("PayoutProcessor", fields: [processedById], references: [id], onDelete: SetNull)
+  driver     Driver     @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  order      Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  @@index([driverId, createdAt])
-  @@index([status, createdAt])
-  @@map("payout_requests")
+  @@index([driverId, restaurantId, createdAt])
+  @@index([restaurantId, createdAt])
+  @@map("rider_ledger_entries")
+}
+
+/// Money that changed hands between a rider and a restaurant to clear their
+/// balance. Only the party who received the money records it, so a settlement
+/// is never on the payer's word alone.
+model RiderSettlement {
+  id           String                   @id @default(cuid())
+  driverId     String                   @map("driver_id")
+  restaurantId String                   @map("restaurant_id")
+  direction    RiderSettlementDirection
+  amount       Decimal                  @db.Decimal(10, 2)
+  note         String?                  @db.VarChar(300)
+
+  recordedById String? @map("recorded_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  driver     Driver     @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  recordedBy User?      @relation("RiderSettlementRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([driverId, restaurantId, createdAt])
+  @@index([restaurantId, createdAt])
+  @@map("rider_settlements")
 }
 
 model Vehicle {
@@ -1415,21 +1429,22 @@ model Order {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  customer       User                 @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  restaurant     Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
-  driver         Driver?              @relation(fields: [driverId], references: [id], onDelete: SetNull)
-  address        Address?             @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  zone           Zone                 @relation(fields: [zoneId], references: [id], onDelete: Restrict)
-  coupon         Coupon?              @relation(fields: [couponId], references: [id], onDelete: SetNull)
-  items          OrderItem[]
-  statusHistory  OrderStatusHistory[]
-  payments       Payment[]
-  transactions   Transaction[]
-  review         Review?
-  redemption     CouponRedemption?
-  supportTickets SupportTicket[]
-  assignments    DeliveryAssignment[]
-  driverEarnings DriverEarning[]
+  customer         User                 @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  restaurant       Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  driver           Driver?              @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  address          Address?             @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  zone             Zone                 @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  coupon           Coupon?              @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  items            OrderItem[]
+  statusHistory    OrderStatusHistory[]
+  payments         Payment[]
+  transactions     Transaction[]
+  review           Review?
+  redemption       CouponRedemption?
+  supportTickets   SupportTicket[]
+  assignments      DeliveryAssignment[]
+  driverEarnings   DriverEarning[]
+  riderLedgerEntry RiderLedgerEntry?
 
   @@index([customerId, createdAt])
   @@index([restaurantId, status])

@@ -124,7 +124,7 @@ describe('StartCheckoutUseCase — scan to pay', () => {
     };
   }
 
-  it('hands back the restaurant’s codes and reuses the attempt opened with the order', async () => {
+  it('hands back the business’s codes and reuses the attempt opened with the order', async () => {
     const { useCase, payments } = build(order());
 
     const result = await useCase.execute(
@@ -147,7 +147,7 @@ describe('StartCheckoutUseCase — scan to pay', () => {
     ).rejects.toThrow(/chosen when the order is placed/);
   });
 
-  it('refuses when the restaurant has since taken its codes down', async () => {
+  it('refuses when the business has since taken its codes down', async () => {
     const { useCase } = build(
       order({ restaurant: { id: 'restaurant-1', name: 'Chapli Kabab House', paymentQrCodes: [] } }),
     );
@@ -191,7 +191,7 @@ describe('MarkPaymentReceivedUseCase', () => {
     expect(result.status).toBe(PaymentStatus.PAID);
   });
 
-  it('lets a cash order be paid by QR instead, confirmed by the restaurant', async () => {
+  it('lets a cash order be paid by QR instead, confirmed by the business', async () => {
     const { useCase, payments } = build(
       order({ paymentMethod: PaymentMethod.CASH_ON_DELIVERY }),
       ActorType.RESTAURANT,
@@ -213,7 +213,7 @@ describe('MarkPaymentReceivedUseCase', () => {
 
     await expect(
       useCase.execute('order-1', { channel: 'JAZZCASH' }, user(UserRole.CUSTOMER)),
-    ).rejects.toThrow(/restaurant or your rider/);
+    ).rejects.toThrow(/business or your rider/);
     expect(payments.settleManualTransfer).not.toHaveBeenCalled();
   });
 
@@ -246,7 +246,7 @@ describe('MarkPaymentReceivedUseCase', () => {
 });
 
 describe('GetOrderPaymentQrUseCase', () => {
-  it('shows the customer the restaurant’s codes, and the rider’s once one has the order', async () => {
+  it('shows the customer the business’s codes, and the rider’s once one has the order', async () => {
     const useCase = new GetOrderPaymentQrUseCase(accessFor(order(WITH_RIDER), ActorType.CUSTOMER));
 
     const result = await useCase.execute('order-1', user(UserRole.CUSTOMER));

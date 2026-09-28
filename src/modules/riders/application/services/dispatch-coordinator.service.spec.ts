@@ -58,7 +58,7 @@ function build(options: { waiting?: string[]; expired?: number } = {}) {
 beforeEach(() => jest.clearAllMocks());
 
 describe('DispatchCoordinator — the confirmation hook', () => {
-  it('offers an order the moment the restaurant confirms it', async () => {
+  it('offers an order the moment the business confirms it', async () => {
     const { coordinator, assign } = build();
 
     await coordinator.onOrderConfirmed(event());

@@ -80,7 +80,7 @@ export class BulkUpdateItemsUseCase {
 
     if (foreign.length > 0) {
       throw new BusinessRuleViolationException(
-        `These items do not belong to this restaurant: ${foreign.slice(0, 5).join(', ')}.`,
+        `These items do not belong to this business: ${foreign.slice(0, 5).join(', ')}.`,
       );
     }
 
@@ -128,7 +128,7 @@ export class BulkStatusUseCase {
 
     if (foreign.length > 0) {
       throw new BusinessRuleViolationException(
-        `These items do not belong to this restaurant: ${foreign.slice(0, 5).join(', ')}.`,
+        `These items do not belong to this business: ${foreign.slice(0, 5).join(', ')}.`,
       );
     }
 

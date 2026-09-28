@@ -32,7 +32,7 @@ export class MenusController {
   @Get('restaurants/:restaurantId/menu')
   @ApiParam({ name: 'restaurantId' })
   @ApiOperation({
-    summary: 'Get the full menu for a restaurant',
+    summary: 'Get the full menu for a business',
     description:
       'Active menus with their active sections and item counts, ready to render ' +
       'the storefront in one request.',
@@ -45,7 +45,7 @@ export class MenusController {
   @Get('restaurants/:restaurantId/menu-items')
   @ApiParam({ name: 'restaurantId' })
   @ApiOperation({
-    summary: 'Search a restaurant menu',
+    summary: 'Search a business menu',
     description:
       'Paginated, filterable and sortable. Each item carries isAvailable plus ' +
       'an availabilityReason, so the client can tell "sold out" from "not ' +

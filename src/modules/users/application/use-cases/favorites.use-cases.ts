@@ -85,7 +85,7 @@ export class AddFavoriteUseCase {
       const restaurantId = dto.restaurantId as string;
 
       if (!(await this.favorites.restaurantExists(restaurantId))) {
-        throw new ResourceNotFoundException('Restaurant', restaurantId);
+        throw new ResourceNotFoundException('Business', restaurantId);
       }
 
       try {
@@ -93,7 +93,7 @@ export class AddFavoriteUseCase {
       } catch {
         // The unique index on (userId, restaurantId) is what actually prevents
         // duplicates under concurrent taps on the heart button.
-        throw new ResourceConflictException('This restaurant is already in your favorites.');
+        throw new ResourceConflictException('This business is already in your favorites.');
       }
     }
 

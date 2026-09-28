@@ -9,18 +9,22 @@ import {
   OrderStatus,
   PaymentMethod,
   PaymentStatus,
-  PayoutMethod,
-  PayoutStatus,
+  RiderSettlementDirection,
   VehicleType,
   type DriverEarning,
   type DriverDocument,
-  type PayoutRequest,
-  type WalletTransaction,
 } from '@prisma/client';
 
 import { PaymentQrCodeDto, toPaymentQrCodes } from '@/common/dto/payment-qr-code.dto';
 
 import type { AssignmentWithOrder } from '../../domain/repositories/assignment.repository';
+import type {
+  LedgerEntryWithContext,
+  RestaurantBalance,
+  RiderBalance,
+  SettlementTotals,
+  SettlementWithContext,
+} from '../../domain/repositories/rider-finance.repository';
 import type { RiderWithDetails } from '../../domain/repositories/rider.repository';
 import { RiderLifecycle } from '../../domain/services/rider-lifecycle';
 
@@ -134,6 +138,19 @@ export class AssignmentOrderDto {
     description: 'Cash the rider must collect at the door. Zero for prepaid orders.',
   })
   cashToCollect!: number;
+  @ApiProperty({
+    example: 150,
+    description: 'Delivery fee plus tip: what the rider keeps for this run.',
+  })
+  riderFee!: number;
+  @ApiProperty({
+    example: 1090,
+    description:
+      'What the rider owes the business from the cash they collect: cashToCollect ' +
+      'minus riderFee. Zero for prepaid orders, where the business owes the rider ' +
+      'their fee instead.',
+  })
+  cashForRestaurant!: number;
 
   @ApiProperty({ example: 'Chapli Kabab House' }) restaurantName!: string;
   @ApiProperty({ example: 'Main GT Road, Pabbi' }) restaurantAddress!: string;
@@ -167,7 +184,10 @@ export class AssignmentDto {
   @ApiProperty({ type: AssignmentOrderDto }) order!: AssignmentOrderDto;
 
   @ApiPropertyOptional({ nullable: true, example: 1.2 }) pickupDistanceKm!: number | null;
-  @ApiProperty({ example: 105, description: 'Quoted before the tip, which may still change.' })
+  @ApiProperty({
+    example: 105,
+    description: 'The delivery fee, quoted before the tip, which may still change.',
+  })
   estimatedEarning!: number;
 
   @ApiProperty({ example: true, description: 'False when a dispatcher assigned it by hand.' })
@@ -208,41 +228,79 @@ export class EarningsSummaryDto {
   averagePerDelivery!: number;
 }
 
-export class RiderWalletDto {
-  @ApiProperty({ example: 4820.5 }) balance!: number;
-  @ApiProperty({ example: 'PKR' }) currency!: string;
-  @ApiProperty({ example: false, description: 'Frozen during a fraud investigation.' })
-  isLocked!: boolean;
-  @ApiProperty({ example: 2500, description: 'Already committed to withdrawals in progress.' })
-  pendingWithdrawals!: number;
-  @ApiProperty({ example: 2320.5, description: 'Balance minus what is held for withdrawals.' })
-  availableToWithdraw!: number;
+// ── Rider ↔ restaurant settlement ──────────────────────────────
+
+export class SettlementTotalsDto {
+  @ApiProperty({ example: 14 }) deliveries!: number;
+  @ApiProperty({ example: 12400, description: 'Order money the rider took from customers.' })
+  cashCollected!: number;
+  @ApiProperty({ example: 1260, description: 'Delivery fees and tips the rider kept.' })
+  riderFees!: number;
+  @ApiProperty({ example: 9000, description: 'Cash the business has confirmed receiving.' })
+  cashHandedOver!: number;
+  @ApiProperty({ example: 0, description: 'Fees the rider has confirmed receiving.' })
+  feesPaid!: number;
+  @ApiProperty({
+    example: 2140,
+    description:
+      'What the rider owes the business right now. Negative when the business ' + 'owes the rider.',
+  })
+  balance!: number;
+  @ApiPropertyOptional({ nullable: true }) lastActivityAt!: Date | null;
 }
 
-export class WalletTransactionDto {
+/** The rider's view: one row per restaurant they have delivered for. */
+export class RestaurantBalanceDto extends SettlementTotalsDto {
+  @ApiProperty() restaurantId!: string;
+  @ApiProperty({ example: 'Chapli Kabab House' }) restaurantName!: string;
+  @ApiPropertyOptional({ nullable: true }) restaurantPhone!: string | null;
+  @ApiProperty({ example: 'Main GT Road, Pabbi' }) restaurantAddress!: string;
+}
+
+/** The restaurant's view: one row per rider who has delivered for it. */
+export class RiderBalanceDto extends SettlementTotalsDto {
+  @ApiProperty() driverId!: string;
+  @ApiProperty({ example: 'Bilal Ahmed' }) riderName!: string;
+  @ApiProperty({ example: '+923005551234' }) riderPhone!: string;
+  @ApiProperty({
+    type: [PaymentQrCodeDto],
+    description: 'Where the business can send the rider the fees it owes.',
+  })
+  paymentQrCodes!: PaymentQrCodeDto[];
+}
+
+export class RiderLedgerEntryDto {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'CREDIT' }) type!: string;
-  @ApiProperty({ example: 'DRIVER_EARNING' }) reason!: string;
-  @ApiProperty({ example: 145 }) amount!: number;
-  @ApiProperty({ example: 4820.5 }) balanceAfter!: number;
-  @ApiPropertyOptional({ nullable: true }) description!: string | null;
+  @ApiProperty() orderId!: string;
+  @ApiProperty({ example: 'ZD-260809-0007' }) orderNumber!: string;
+  @ApiProperty({ enum: PaymentMethod }) paymentMethod!: PaymentMethod;
+  @ApiProperty() driverId!: string;
+  @ApiProperty({ example: 'Bilal Ahmed' }) riderName!: string;
+  @ApiProperty() restaurantId!: string;
+  @ApiProperty({ example: 'Chapli Kabab House' }) restaurantName!: string;
+  @ApiProperty({ example: 1240, description: 'Zero when the business was paid directly.' })
+  collectedAmount!: number;
+  @ApiProperty({ example: 150, description: 'Delivery fee plus tip, kept by the rider.' })
+  riderFee!: number;
+  @ApiProperty({
+    example: 1090,
+    description: 'Positive: the rider owes the business. Negative: the business owes the rider.',
+  })
+  netAmount!: number;
   @ApiProperty() createdAt!: Date;
 }
 
-export class PayoutRequestDto {
+export class RiderSettlementDto {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'WDR-260809-0001' }) reference!: string;
+  @ApiProperty({ enum: RiderSettlementDirection }) direction!: RiderSettlementDirection;
+  @ApiProperty({ example: 2000 }) amount!: number;
+  @ApiPropertyOptional({ nullable: true }) note!: string | null;
   @ApiProperty() driverId!: string;
-  @ApiProperty({ example: 2500 }) amount!: number;
-  @ApiProperty({ enum: PayoutMethod }) method!: PayoutMethod;
-  @ApiProperty({ enum: PayoutStatus }) status!: PayoutStatus;
-  @ApiPropertyOptional({ nullable: true, example: 'Meezan Bank' }) bankName!: string | null;
-  @ApiProperty({ example: 'Ahmad Khan' }) accountTitle!: string;
-  @ApiProperty({ example: '••••4567', description: 'Masked to the last four digits.' })
-  accountNumber!: string;
-  @ApiPropertyOptional({ nullable: true }) rejectionReason!: string | null;
-  @ApiPropertyOptional({ nullable: true }) paymentReference!: string | null;
-  @ApiPropertyOptional({ nullable: true }) processedAt!: Date | null;
+  @ApiProperty({ example: 'Bilal Ahmed' }) riderName!: string;
+  @ApiProperty() restaurantId!: string;
+  @ApiProperty({ example: 'Chapli Kabab House' }) restaurantName!: string;
+  @ApiPropertyOptional({ nullable: true, description: 'Who confirmed receiving the money.' })
+  recordedByName!: string | null;
   @ApiProperty() createdAt!: Date;
 }
 
@@ -255,10 +313,18 @@ export class DeliveryCodeIssuedDto {
 }
 
 export class DeliveryCompletedDto {
-  @ApiProperty({ example: 'Delivery confirmed. Rs. 145 has been added to your wallet.' })
+  @ApiProperty({
+    example: 'Delivery confirmed. Keep Rs. 150 and hand Rs. 1090 to Chapli Kabab House.',
+  })
   message!: string;
-  @ApiProperty({ example: 145 }) earned!: number;
+  @ApiProperty({ example: 150, description: 'Delivery fee plus tip.' }) earned!: number;
   @ApiProperty({ type: [EarningDto] }) breakdown!: EarningDto[];
+  @ApiProperty({ example: 1240, description: 'Money you took from the customer.' })
+  collected!: number;
+  @ApiProperty({ example: 1090, description: 'What you now owe the business for this order.' })
+  owedToRestaurant!: number;
+  @ApiProperty({ example: 0, description: 'What the business now owes you for this order.' })
+  owedByRestaurant!: number;
 }
 
 // ── Mappers ────────────────────────────────────────────────────
@@ -398,6 +464,15 @@ export function toAssignmentDto(
 
   const { order } = assignment;
 
+  // Only an unpaid cash order leaves the rider holding money. Showing a figure
+  // for a prepaid order is how riders end up asking for it twice.
+  const cashToCollect =
+    order.paymentMethod === PaymentMethod.CASH_ON_DELIVERY &&
+    order.paymentStatus !== PaymentStatus.PAID
+      ? Number(order.totalAmount)
+      : 0;
+  const riderFee = Number(order.deliveryFee) + Number(order.tipAmount);
+
   return {
     id: assignment.id,
     status: assignment.status,
@@ -409,13 +484,9 @@ export function toAssignmentDto(
       totalAmount: Number(order.totalAmount),
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,
-      // Only an unpaid cash order leaves the rider holding money. Showing a
-      // figure for a prepaid order is how riders end up asking for it twice.
-      cashToCollect:
-        order.paymentMethod === PaymentMethod.CASH_ON_DELIVERY &&
-        order.paymentStatus !== PaymentStatus.PAID
-          ? Number(order.totalAmount)
-          : 0,
+      cashToCollect,
+      riderFee,
+      cashForRestaurant: cashToCollect === 0 ? 0 : Math.max(0, cashToCollect - riderFee),
       restaurantName: order.restaurant.name,
       restaurantAddress: order.restaurant.addressLine,
       restaurantPhone: order.restaurant.phone,
@@ -458,32 +529,66 @@ export function toEarningDto(
   };
 }
 
-export function toWalletTransactionDto(entry: WalletTransaction): WalletTransactionDto {
+function toTotalsDto(totals: SettlementTotals): SettlementTotalsDto {
+  return {
+    deliveries: totals.deliveries,
+    cashCollected: totals.cashCollected,
+    riderFees: totals.riderFees,
+    cashHandedOver: totals.cashHandedOver,
+    feesPaid: totals.feesPaid,
+    balance: totals.balance,
+    lastActivityAt: totals.lastActivityAt,
+  };
+}
+
+export function toRestaurantBalanceDto(row: RestaurantBalance): RestaurantBalanceDto {
+  return {
+    ...toTotalsDto(row),
+    restaurantId: row.restaurantId,
+    restaurantName: row.restaurant.name,
+    restaurantPhone: row.restaurant.phone,
+    restaurantAddress: row.restaurant.addressLine,
+  };
+}
+
+export function toRiderBalanceDto(row: RiderBalance): RiderBalanceDto {
+  return {
+    ...toTotalsDto(row),
+    driverId: row.driverId,
+    riderName: row.driver.fullName,
+    riderPhone: row.driver.phone,
+    paymentQrCodes: toPaymentQrCodes(row.driver.paymentQrCodes),
+  };
+}
+
+export function toLedgerEntryDto(entry: LedgerEntryWithContext): RiderLedgerEntryDto {
   return {
     id: entry.id,
-    type: entry.type,
-    reason: entry.reason,
-    amount: Number(entry.amount),
-    balanceAfter: Number(entry.balanceAfter),
-    description: entry.description,
+    orderId: entry.orderId,
+    orderNumber: entry.order.orderNumber,
+    paymentMethod: entry.order.paymentMethod,
+    driverId: entry.driverId,
+    riderName: entry.driver.user.fullName,
+    restaurantId: entry.restaurantId,
+    restaurantName: entry.restaurant.name,
+    collectedAmount: Number(entry.collectedAmount),
+    riderFee: Number(entry.riderFee),
+    netAmount: Number(entry.netAmount),
     createdAt: entry.createdAt,
   };
 }
 
-export function toPayoutDto(payout: PayoutRequest): PayoutRequestDto {
+export function toSettlementDto(settlement: SettlementWithContext): RiderSettlementDto {
   return {
-    id: payout.id,
-    reference: payout.reference,
-    driverId: payout.driverId,
-    amount: Number(payout.amount),
-    method: payout.method,
-    status: payout.status,
-    bankName: payout.bankName,
-    accountTitle: payout.accountTitle,
-    accountNumber: mask(payout.accountNumber) ?? '',
-    rejectionReason: payout.rejectionReason,
-    paymentReference: payout.paymentReference,
-    processedAt: payout.processedAt,
-    createdAt: payout.createdAt,
+    id: settlement.id,
+    direction: settlement.direction,
+    amount: Number(settlement.amount),
+    note: settlement.note,
+    driverId: settlement.driverId,
+    riderName: settlement.driver.user.fullName,
+    restaurantId: settlement.restaurantId,
+    restaurantName: settlement.restaurant.name,
+    recordedByName: settlement.recordedBy?.fullName ?? null,
+    createdAt: settlement.createdAt,
   };
 }

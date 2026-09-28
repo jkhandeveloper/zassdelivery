@@ -83,7 +83,7 @@ export class AssignOrderUseCase {
 
     if (!DISPATCHABLE_STATUSES.includes(order.status)) {
       throw new BusinessRuleViolationException(
-        `An order that is ${order.status} cannot be dispatched. It must be confirmed by the restaurant first.`,
+        `An order that is ${order.status} cannot be dispatched. It must be confirmed by the business first.`,
       );
     }
 
@@ -94,7 +94,6 @@ export class AssignOrderUseCase {
     }
 
     const dispatchSettings = await this.settings.dispatch();
-    const rates = await this.settings.earningRates();
 
     const pickupLat = order.restaurant.latitude;
     const pickupLng = order.restaurant.longitude;
@@ -111,10 +110,7 @@ export class AssignOrderUseCase {
       driverId: chosen.driverId,
       expiresAt: new Date(Date.now() + timeoutSeconds * 1000),
       pickupDistanceKm: chosen.pickupDistanceKm,
-      estimatedEarning: this.earnings.quote(
-        order.distanceKm === null ? null : Number(order.distanceKm),
-        rates,
-      ),
+      estimatedEarning: this.earnings.quote(Number(order.deliveryFee)),
       assignedById: dto.driverId === undefined ? null : (actor?.id ?? null),
       isAuto: dto.driverId === undefined,
     });

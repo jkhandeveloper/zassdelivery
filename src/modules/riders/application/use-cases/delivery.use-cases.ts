@@ -17,7 +17,6 @@ import {
   type DeliveryCompletedDto,
 } from '../dto/rider-response.dto';
 import type { ConfirmDeliveryDto } from '../dto/rider.dto';
-import { RiderSettingsService } from '../services/rider-settings.service';
 import { AssignmentAccessService } from './dispatch.use-cases';
 
 @Injectable()
@@ -102,19 +101,20 @@ export class ConfirmDeliveryUseCase {
     private readonly otp: DeliveryOtpService,
     private readonly finance: RiderFinanceRepository,
     private readonly earnings: EarningsCalculator,
-    private readonly settings: RiderSettingsService,
   ) {}
 
   /**
-   * Closes the delivery against the customer's code, then pays the rider.
+   * Closes the delivery against the customer's code, then records who owes
+   * whom: the rider keeps the delivery fee and tip, and either owes the
+   * restaurant the rest of the cash they collected or is owed their fee.
    *
    * The code is what makes "delivered" mean something. Without it a rider can
    * mark an order complete from the end of the street, and the only party who
    * can dispute it is the customer who never got their food — after the fact,
    * against a record that says otherwise.
    *
-   * Order first, money second: if the payout fails the delivery is still
-   * recorded, and an unpaid earning is a support ticket rather than a customer
+   * Order first, money second: if the ledger write fails the delivery is still
+   * recorded, and a missing entry is a support ticket rather than a customer
    * whose order is stuck ON_THE_WAY forever.
    */
   async execute(
@@ -154,31 +154,37 @@ export class ConfirmDeliveryUseCase {
 
     await this.assignments.complete(assignment.id);
 
-    const rates = await this.settings.earningRates();
-    const breakdown = this.earnings.calculate(
-      {
-        distanceKm:
-          assignment.order.distanceKm === null ? null : Number(assignment.order.distanceKm),
-        tipAmount: Number(assignment.order.tipAmount),
-      },
-      rates,
-    );
+    const breakdown = this.earnings.calculate({
+      deliveryFee: Number(assignment.order.deliveryFee),
+      tipAmount: Number(assignment.order.tipAmount),
+    });
 
-    const credited = await this.finance.creditDeliveryEarnings({
+    const recorded = await this.finance.recordDelivery({
       driverId: rider.id,
-      userId: rider.userId,
+      restaurantId: assignment.order.restaurant.id,
       orderId: assignment.order.id,
-      orderNumber: assignment.order.orderNumber,
       assignmentId: assignment.id,
+      totalAmount: Number(assignment.order.totalAmount),
       components: breakdown.components,
       total: breakdown.total,
     });
 
     const earnedAt = new Date();
+    const owedToRestaurant = Math.max(0, recorded.net);
+    const owedByRestaurant = Math.max(0, -recorded.net);
+    const restaurantName = assignment.order.restaurant.name;
 
     return {
-      message: `Delivery confirmed. Rs. ${credited} has been added to your wallet.`,
-      earned: credited,
+      message:
+        owedToRestaurant > 0
+          ? `Delivery confirmed. Keep Rs. ${recorded.earned} and hand Rs. ${owedToRestaurant} to ${restaurantName}.`
+          : owedByRestaurant > 0
+            ? `Delivery confirmed. ${restaurantName} owes you Rs. ${owedByRestaurant} for this run.`
+            : 'Delivery confirmed.',
+      earned: recorded.earned,
+      collected: recorded.collected,
+      owedToRestaurant,
+      owedByRestaurant,
       // Echoed straight from the calculation rather than re-read from the
       // ledger: the rider is standing on the doorstep waiting for this screen,
       // and the rows that were just written say exactly the same thing.

@@ -157,7 +157,7 @@ export class CreateCouponDto {
   @Min(1)
   perUserLimit?: number;
 
-  @ApiPropertyOptional({ description: 'Restrict to one restaurant.' })
+  @ApiPropertyOptional({ description: 'Restrict to one business.' })
   @IsOptional()
   @IsString()
   restaurantId?: string;
@@ -259,7 +259,7 @@ export class CreateBannerDto {
   @IsEnum(BannerPlacement)
   placement!: BannerPlacement;
 
-  @ApiPropertyOptional({ description: 'Deep-link to a restaurant.' })
+  @ApiPropertyOptional({ description: 'Deep-link to a business.' })
   @IsOptional()
   @IsString()
   restaurantId?: string;

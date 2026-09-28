@@ -77,7 +77,7 @@ export class OrderManagementController {
   @Get('restaurants/:restaurantId')
   @ApiParam({ name: 'restaurantId' })
   @ApiOperation({
-    summary: 'Orders for a restaurant',
+    summary: 'Orders for a business',
     description: 'Use activeOnly=true for the kitchen dashboard.',
   })
   @ApiPaginatedResponse(OrderDto)
@@ -108,7 +108,7 @@ export class OrderManagementController {
   @RequirePermissions('orders.read')
   @ApiOperation({
     summary: 'All orders',
-    description: 'Staff view across every restaurant, rider and customer.',
+    description: 'Staff view across every business, rider and customer.',
   })
   @ApiPaginatedResponse(OrderDto)
   all(@Query() query: ListOrdersAdminQueryDto): Promise<PaginatedResult<OrderDto>> {
@@ -193,7 +193,7 @@ export class OrderManagementController {
     summary: 'Mark delivered',
     description:
       'ON_THE_WAY → DELIVERED for the assigned rider, who must confirm with the ' +
-      'customer’s code through the rider app. The restaurant and support may ' +
+      'customer’s code through the rider app. The business and support may ' +
       'also close an order out from READY_FOR_PICKUP, which is how a vendor who ' +
       'delivers themselves finishes one. For cash orders this is also when ' +
       'payment is settled and the commission entry is confirmed.',
@@ -237,16 +237,16 @@ export class OrderManagementController {
   @HttpCode(HttpStatus.OK)
   @ApiParam({ name: 'id' })
   @ApiOperation({
-    summary: 'Record a refund the restaurant has made',
+    summary: 'Record a refund the business has made',
     description:
-      'The customer paid the restaurant directly, so the restaurant returns the ' +
-      'money itself and records it here. Only the restaurant’s owner or staff may ' +
+      'The customer paid the business directly, so the business returns the ' +
+      'money itself and records it here. Only the business’s owner or staff may ' +
       'call this. No money moves on the platform: it posts a ledger entry and ' +
       'updates the payment status. Partial refunds accumulate and can never ' +
       'exceed what was paid.',
   })
   @ApiResponse({ status: 200, description: 'Refund recorded.' })
-  @ApiResponse({ status: 403, description: 'Not the restaurant that took the order.' })
+  @ApiResponse({ status: 403, description: 'Not the business that took the order.' })
   @ApiResponse({ status: 422, description: 'Unpaid, already fully refunded, or amount too large.' })
   refundOrder(
     @Param('id') id: string,

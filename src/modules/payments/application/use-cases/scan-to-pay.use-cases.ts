@@ -96,7 +96,7 @@ export class MarkPaymentReceivedUseCase {
 
     if (as === ActorType.CUSTOMER) {
       throw new ForbiddenOperationException(
-        'The restaurant or your rider confirms a transfer once it reaches them.',
+        'The business or your rider confirms a transfer once it reaches them.',
       );
     }
 

@@ -231,7 +231,7 @@ export class StartCheckoutUseCase {
       action: 'SCAN_QR',
       message:
         `Scan a code and send Rs. ${amount} to ${order.restaurant.name}, quoting ` +
-        `${order.orderNumber}. The restaurant confirms once it arrives.`,
+        `${order.orderNumber}. The business confirms once it arrives.`,
       qrCodes: codes,
     };
   }

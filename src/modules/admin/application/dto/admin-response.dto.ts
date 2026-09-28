@@ -44,7 +44,6 @@ export class DashboardQueuesDto {
   })
   ordersAwaitingRider!: number;
   @ApiProperty({ example: 11 }) openTickets!: number;
-  @ApiProperty({ example: 5 }) pendingWithdrawals!: number;
   @ApiProperty({ example: 1, description: 'Gateway callbacks stored but not applied.' })
   unresolvedWebhooks!: number;
 }

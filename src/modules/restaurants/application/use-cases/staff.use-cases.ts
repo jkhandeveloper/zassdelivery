@@ -31,7 +31,7 @@ export class RegisterRestaurantStaffUseCase {
     const restaurant = await this.restaurants.findById(restaurantId);
 
     if (!restaurant) {
-      throw new ResourceNotFoundException('Restaurant', restaurantId);
+      throw new ResourceNotFoundException('Business', restaurantId);
     }
 
     // Confirms the actor may see this restaurant at all (404s otherwise).
@@ -41,7 +41,7 @@ export class RegisterRestaurantStaffUseCase {
     // for it; only the owner (or platform staff, via assertCanManage above)
     // grows the roster.
     if (actor.role === UserRole.VENDOR_STAFF) {
-      throw new ForbiddenOperationException('Only the restaurant owner may register staff.');
+      throw new ForbiddenOperationException('Only the business owner may register staff.');
     }
 
     if (await this.users.existsByPhone(dto.phone)) {
@@ -78,7 +78,7 @@ export class ListRestaurantStaffUseCase {
     const restaurant = await this.restaurants.findById(restaurantId);
 
     if (!restaurant) {
-      throw new ResourceNotFoundException('Restaurant', restaurantId);
+      throw new ResourceNotFoundException('Business', restaurantId);
     }
 
     assertCanManage(restaurant, actor);

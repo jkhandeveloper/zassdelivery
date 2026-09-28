@@ -82,9 +82,8 @@ export class PrismaRiderRepository extends RiderRepository {
   }
 
   async register(input: RegisterRiderInput): Promise<RiderWithDetails> {
-    // Profile, vehicle and wallet land together. A rider whose wallet only
-    // appears on their first payout would fail at the worst possible moment —
-    // standing on a doorstep with the delivery already made.
+    // Profile and vehicle land together: a rider with no vehicle cannot be
+    // dispatched, and half an application is worse than none.
     return this.prisma.$transaction(async (tx) => {
       const driver = await tx.driver.create({
         data: {
@@ -111,12 +110,6 @@ export class PrismaRiderRepository extends RiderRepository {
           plateNumber: input.vehicle.plateNumber,
           isPrimary: true,
         },
-      });
-
-      await tx.wallet.upsert({
-        where: { userId: input.userId },
-        update: {},
-        create: { userId: input.userId },
       });
 
       return tx.driver.findUniqueOrThrow({ where: { id: driver.id }, include: DETAILS });

@@ -58,7 +58,7 @@ export class CategoryHitDto {
   @ApiProperty({ example: 'BBQ' }) name!: string;
   @ApiProperty({ example: 'bbq' }) slug!: string;
   @ApiPropertyOptional({ nullable: true }) iconUrl!: string | null;
-  @ApiProperty({ example: 2, description: 'Active restaurants in this category.' })
+  @ApiProperty({ example: 2, description: 'Active businesses in this category.' })
   restaurantCount!: number;
 }
 
@@ -94,7 +94,7 @@ export class AutocompleteHitDto {
 
   @ApiProperty({
     example: 'chapli-kabab-house-pabbi',
-    description: 'Slug to navigate to. For a dish this is its restaurant’s slug.',
+    description: 'Slug to navigate to. For a dish this is its business’s slug.',
   })
   slug!: string;
 

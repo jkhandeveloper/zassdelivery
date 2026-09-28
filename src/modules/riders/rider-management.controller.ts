@@ -8,21 +8,13 @@ import { ApiErrorResponseDto } from '@/common/dto/api-response.dto';
 import type { AuthenticatedUser } from '@/common/interfaces/authenticated-user.interface';
 import type { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
 
-import {
-  AssignmentDto,
-  PayoutRequestDto,
-  RiderDocumentDto,
-  RiderDto,
-} from './application/dto/rider-response.dto';
+import { AssignmentDto, RiderDocumentDto, RiderDto } from './application/dto/rider-response.dto';
 import {
   AssignOrderDto,
   CancelAssignmentDto,
   ListAssignmentsQueryDto,
-  ListPayoutsQueryDto,
   ListRidersQueryDto,
-  MarkPayoutPaidDto,
   RejectDocumentDto,
-  RejectPayoutDto,
   RejectRiderDto,
   SuspendRiderDto,
 } from './application/dto/rider.dto';
@@ -32,10 +24,6 @@ import {
   ExpireOffersUseCase,
   ListAssignmentsUseCase,
 } from './application/use-cases/dispatch.use-cases';
-import {
-  ListPayoutsUseCase,
-  ProcessPayoutUseCase,
-} from './application/use-cases/earnings.use-cases';
 import {
   ApproveRiderUseCase,
   GetRiderUseCase,
@@ -48,12 +36,11 @@ import {
 } from './application/use-cases/rider-approval.use-cases';
 
 /**
- * The operator side of the rider module: the approval queue, the dispatch
- * board and the withdrawal queue.
+ * The operator side of the rider module: the approval queue and the dispatch
+ * board.
  *
  * Guarded by permission rather than by role, so a dispatcher can be given
- * `orders.assign` without also being handed the ability to approve riders or
- * move their money.
+ * `orders.assign` without also being handed the ability to approve riders.
  */
 @ApiTags('Rider Management')
 @ApiBearerAuth('access-token')
@@ -75,8 +62,6 @@ export class RiderManagementController {
     private readonly listAssignments: ListAssignmentsUseCase,
     private readonly cancelAssignment: CancelAssignmentUseCase,
     private readonly expireOffers: ExpireOffersUseCase,
-    private readonly listPayouts: ListPayoutsUseCase,
-    private readonly processPayout: ProcessPayoutUseCase,
   ) {}
 
   // ── Roster and approval queue ──────────────────────────────
@@ -239,7 +224,7 @@ export class RiderManagementController {
       'online rider with no delivery in hand. The result is an offer, not an ' +
       'assignment — the rider still has to accept it, and an order pushed onto ' +
       'a rider who has gone home only looks handled. Dispatch may start as ' +
-      'soon as the restaurant confirms, so a rider can ride while the food cooks.',
+      'soon as the business confirms, so a rider can ride while the food cooks.',
   })
   @ApiResponse({ status: 201, type: AssignmentDto })
   @ApiResponse({
@@ -307,73 +292,5 @@ export class RiderManagementController {
   @ApiResponse({ status: 200, description: 'Number of offers expired.' })
   expire(): Promise<{ expired: number }> {
     return this.expireOffers.execute();
-  }
-
-  // ── Withdrawal queue ───────────────────────────────────────
-
-  @Get('withdrawals')
-  @RequirePermissions('payouts.read')
-  @ApiOperation({
-    summary: 'The withdrawal queue',
-    description: 'Filter by status=PENDING for requests waiting on a decision.',
-  })
-  @ApiPaginatedResponse(PayoutRequestDto)
-  withdrawals(@Query() query: ListPayoutsQueryDto): Promise<PaginatedResult<PayoutRequestDto>> {
-    return this.listPayouts.all(query);
-  }
-
-  @Post('withdrawals/:id/approve')
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions('payouts.approve')
-  @ApiParam({ name: 'id' })
-  @ApiOperation({
-    summary: 'Approve a withdrawal',
-    description:
-      'Clears it for payment. Approval and payment are separate steps because ' +
-      'they happen at different times and by different hands — collapsing them ' +
-      'would record money as sent before anyone sent it.',
-  })
-  @ApiResponse({ status: 200, type: PayoutRequestDto })
-  approveWithdrawal(
-    @Param('id') id: string,
-    @CurrentUser() actor: AuthenticatedUser,
-  ): Promise<PayoutRequestDto> {
-    return this.processPayout.approve(id, actor);
-  }
-
-  @Post('withdrawals/:id/paid')
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions('payouts.approve')
-  @ApiParam({ name: 'id' })
-  @ApiOperation({
-    summary: 'Mark a withdrawal paid',
-    description:
-      'Records that the transfer actually happened, with its bank reference. ' +
-      'No money moves here — the wallet was debited when the request was made.',
-  })
-  @ApiResponse({ status: 200, type: PayoutRequestDto })
-  markPaid(
-    @Param('id') id: string,
-    @Body() dto: MarkPayoutPaidDto,
-    @CurrentUser() actor: AuthenticatedUser,
-  ): Promise<PayoutRequestDto> {
-    return this.processPayout.markPaid(id, dto, actor);
-  }
-
-  @Post('withdrawals/:id/reject')
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions('payouts.approve')
-  @ApiParam({ name: 'id' })
-  @ApiOperation({
-    summary: 'Reject a withdrawal',
-    description: 'Returns the held money to the rider’s wallet and records why.',
-  })
-  @ApiResponse({ status: 200, type: PayoutRequestDto })
-  rejectWithdrawal(
-    @Param('id') id: string,
-    @Body() dto: RejectPayoutDto,
-    @CurrentUser() actor: AuthenticatedUser,
-  ): Promise<PayoutRequestDto> {
-    return this.processPayout.reject(id, dto, actor);
   }
 }

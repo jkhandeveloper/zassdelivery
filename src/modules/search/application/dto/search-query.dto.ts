@@ -44,7 +44,7 @@ class GeoQueryDto {
   @ApiPropertyOptional({
     description:
       'Customer latitude. Sent with longitude, results are limited to ' +
-      'restaurants that can actually deliver here, and distanceMeters is returned.',
+      'businesses that can actually deliver here, and distanceMeters is returned.',
     example: 34.0091,
   })
   @ValidateIf((dto: GeoQueryDto) => dto.latitude !== undefined || dto.longitude !== undefined)
@@ -59,7 +59,7 @@ class GeoQueryDto {
   longitude?: number;
 
   @ApiPropertyOptional({
-    description: 'Search radius in metres. Capped by each restaurant’s own delivery radius.',
+    description: 'Search radius in metres. Capped by each business’s own delivery radius.',
     example: 5000,
     default: 15000,
     minimum: 100,
@@ -128,7 +128,7 @@ export class SearchRestaurantsDto extends PaginationQueryDto {
   @Max(5)
   minRating?: number;
 
-  @ApiPropertyOptional({ description: 'Only restaurants currently accepting orders.' })
+  @ApiPropertyOptional({ description: 'Only businesses currently accepting orders.' })
   @IsOptional()
   @Transform(toBoolean)
   @IsBoolean()
@@ -172,12 +172,12 @@ export class SearchFoodDto extends PaginationQueryDto {
   @IsIn(FOOD_SEARCH_SORTS, { message: `sort must be one of: ${FOOD_SEARCH_SORTS.join(', ')}` })
   sort?: (typeof FOOD_SEARCH_SORTS)[number];
 
-  @ApiPropertyOptional({ description: 'Restrict to one restaurant.' })
+  @ApiPropertyOptional({ description: 'Restrict to one business.' })
   @IsOptional()
   @IsString()
   restaurantId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by the restaurant’s cuisine category.' })
+  @ApiPropertyOptional({ description: 'Filter by the business’s cuisine category.' })
   @IsOptional()
   @IsString()
   category?: string;

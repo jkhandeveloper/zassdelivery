@@ -77,7 +77,7 @@ import {
  * the same endpoint serves both a vendor editing their own listing and an
  * administrator editing anyone's.
  */
-@ApiTags('Restaurant Management')
+@ApiTags('Business Management')
 @ApiBearerAuth('access-token')
 @ApiResponse({ status: 401, description: 'Not authenticated.', type: ApiErrorResponseDto })
 @ApiResponse({ status: 403, description: 'Not permitted.', type: ApiErrorResponseDto })
@@ -109,7 +109,7 @@ export class RestaurantManagementController {
   @HttpCode(HttpStatus.CREATED)
   @Roles(UserRole.VENDOR_OWNER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'Register a restaurant',
+    summary: 'Register a business',
     description:
       'Creates the listing in PENDING_APPROVAL — nothing goes live on its own. ' +
       'The city and delivery zone are resolved from the coordinates, and the ' +
@@ -127,7 +127,7 @@ export class RestaurantManagementController {
   @Get('mine')
   @Roles(UserRole.VENDOR_OWNER)
   @ApiOperation({
-    summary: 'List my restaurants',
+    summary: 'List my businesses',
     description: 'Scoped to the caller regardless of any ownerId in the query.',
   })
   @ApiPaginatedResponse(RestaurantAdminDto)
@@ -141,7 +141,7 @@ export class RestaurantManagementController {
   @Get()
   @RequirePermissions('restaurants.read')
   @ApiOperation({
-    summary: 'List all restaurants',
+    summary: 'List all businesses',
     description:
       'Staff view across every status, including pending and rejected listings. ' +
       'Filter by status=PENDING_APPROVAL to work the approval queue.',
@@ -154,7 +154,7 @@ export class RestaurantManagementController {
   @Get(':id')
   @ApiParam({ name: 'id' })
   @ApiOperation({
-    summary: 'Get a restaurant with its private fields',
+    summary: 'Get a business with its private fields',
     description: 'The only path that can see a listing which is not yet approved.',
   })
   @ApiResponse({ status: 200, type: RestaurantAdminDto })
@@ -168,7 +168,7 @@ export class RestaurantManagementController {
   @Patch(':id')
   @ApiParam({ name: 'id' })
   @ApiOperation({
-    summary: 'Update a restaurant',
+    summary: 'Update a business',
     description: 'Moving the coordinates re-resolves the city and delivery zone.',
   })
   @ApiResponse({ status: 200, type: RestaurantAdminDto })
@@ -183,7 +183,7 @@ export class RestaurantManagementController {
   @Delete(':id')
   @ApiParam({ name: 'id' })
   @ApiOperation({
-    summary: 'Remove a restaurant',
+    summary: 'Remove a business',
     description: 'Soft delete, so past orders and reviews keep resolving.',
   })
   @ApiResponse({ status: 200, type: MessageResponseDto })
@@ -201,10 +201,10 @@ export class RestaurantManagementController {
   @RequirePermissions('restaurants.approve')
   @ApiParam({ name: 'id' })
   @ApiOperation({
-    summary: 'Approve a pending restaurant',
+    summary: 'Approve a pending business',
     description:
       'Takes the listing live and turns ordering on. Blocked until business ' +
-      'hours are set, since a restaurant with none would be permanently closed.',
+      'hours are set, since a business with none would be permanently closed.',
   })
   @ApiResponse({ status: 200, type: RestaurantAdminDto })
   @ApiResponse({ status: 422, description: 'Illegal transition, or hours not yet set.' })
@@ -220,7 +220,7 @@ export class RestaurantManagementController {
   @RequirePermissions('restaurants.approve')
   @ApiParam({ name: 'id' })
   @ApiOperation({
-    summary: 'Reject a pending restaurant',
+    summary: 'Reject a pending business',
     description: 'The reason is shown to the owner so the rejection is actionable.',
   })
   @ApiResponse({ status: 200, type: RestaurantAdminDto })
@@ -236,7 +236,7 @@ export class RestaurantManagementController {
   @HttpCode(HttpStatus.OK)
   @ApiParam({ name: 'id' })
   @ApiOperation({
-    summary: 'Resubmit a rejected restaurant for review',
+    summary: 'Resubmit a rejected business for review',
     description: 'Owner action. A rejected listing never goes live without a second review.',
   })
   @ApiResponse({ status: 200, type: RestaurantAdminDto })
@@ -354,7 +354,7 @@ export class RestaurantManagementController {
   @ApiOperation({
     summary: 'Set scan-to-pay QR codes',
     description:
-      'The JazzCash, Easypaisa and bank QRs a customer scans to pay this restaurant ' +
+      'The JazzCash, Easypaisa and bank QRs a customer scans to pay this business ' +
       'directly. Replaces the whole list; an empty list turns scan-to-pay off at ' +
       'checkout. Owner only — staff cannot change where the takings go.',
   })
@@ -373,10 +373,10 @@ export class RestaurantManagementController {
   @HttpCode(HttpStatus.CREATED)
   @ApiParam({ name: 'id' })
   @ApiOperation({
-    summary: 'Register a staff account for this restaurant',
+    summary: 'Register a staff account for this business',
     description:
       'Owner action. Creates a VENDOR_STAFF account that can manage only this ' +
-      'restaurant — the kitchen order queue, menu and profile — never any ' +
+      'business — the kitchen order queue, menu and profile — never any ' +
       "other vendor's listing.",
   })
   @ApiResponse({ status: 201, type: RestaurantStaffDto })
@@ -391,7 +391,7 @@ export class RestaurantManagementController {
 
   @Get(':id/staff')
   @ApiParam({ name: 'id' })
-  @ApiOperation({ summary: "List this restaurant's staff accounts" })
+  @ApiOperation({ summary: "List this business's staff accounts" })
   @ApiResponse({ status: 200, type: [RestaurantStaffDto] })
   staff(
     @Param('id') id: string,

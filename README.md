@@ -18,7 +18,7 @@ Built with NestJS 11, PostgreSQL 16 + Prisma, Redis, and TypeScript in strict mo
 | **6**     | Search — full-text, food, category, nearby, trending, popular, autocomplete, Redis cache            | ✅ Complete |
 | **7**     | Cart & pricing — add/remove/update, coupons, delivery fee, tax, discount, validation                | ✅ Complete |
 | **8**     | Orders — placement, lifecycle state machine, timeline, refunds, invoice, transactions               | ✅ Complete |
-| **9**     | Riders — onboarding, documents, approval, dispatch, delivery OTP, earnings, wallet, withdrawals     | ✅ Complete |
+| **9**     | Riders — onboarding, documents, approval, dispatch, delivery OTP, earnings, rider↔vendor cash      | ✅ Complete |
 | **10**    | Payments — COD, JazzCash, Easypaisa, verification, webhooks, refunds, invoices, ledger              | ✅ Complete |
 | **11**    | Notifications — FCM push, device registry, history, preferences, admin broadcasts                   | ✅ Complete |
 | **12**    | Admin — dashboard, reports, coupons, banners, settings, support tickets, audit log                  | ✅ Complete |
@@ -674,44 +674,49 @@ restocking would overstate what is actually available.
 
 Rider self-service. Every route resolves the rider from the access token rather
 than from a path parameter, so there is no id a caller could swap to reach
-someone else's offers, earnings or wallet.
+someone else's offers, earnings or balances.
 
-| Method | Path                                         | Who                                    |
-| ------ | -------------------------------------------- | -------------------------------------- |
-| POST   | `/riders/register`                           | Signed-in rider — opens an application |
-| GET    | `/riders/me`                                 | Own profile + document checklist       |
-| PATCH  | `/riders/me`                                 | Licence, zone, payout details          |
-| POST   | `/riders/me/resubmit`                        | Rejected applicant, back to the queue  |
-| GET    | `/riders/me/documents`                       | Own documents and review state         |
-| PUT    | `/riders/me/documents`                       | Upload or replace one document         |
-| PATCH  | `/riders/me/availability`                    | Online · offline · on break            |
-| PUT    | `/riders/me/location`                        | Position ping (204, no body)           |
-| GET    | `/riders/me/offers`                          | `liveOnly=true` for the inbox          |
-| POST   | `/riders/me/offers/:id/accept` · `/reject`   | Answer an offer                        |
-| GET    | `/riders/me/deliveries` · `/:orderId`        | History, and the run in hand           |
-| POST   | `/riders/me/deliveries/:orderId/pickup`      | Collect + issue the delivery code      |
-| POST   | `/riders/me/deliveries/:orderId/on-the-way`  | Leave the restaurant                   |
-| POST   | `/riders/me/deliveries/:orderId/confirm`     | Close the delivery against the code    |
-| GET    | `/riders/me/earnings` · `/earnings/summary`  | Itemised ledger, and the headline      |
-| GET    | `/riders/me/wallet` · `/wallet/transactions` | Balance and statement                  |
-| POST   | `/riders/me/withdrawals`                     | Request a payout                       |
-| GET    | `/riders/me/withdrawals`                     | Own withdrawal history                 |
-| POST   | `/riders/me/withdrawals/:id/cancel`          | While still pending                    |
+| Method | Path                                           | Who                                    |
+| ------ | ---------------------------------------------- | -------------------------------------- |
+| POST   | `/riders/register`                             | Signed-in rider — opens an application |
+| GET    | `/riders/me`                                   | Own profile + document checklist       |
+| PATCH  | `/riders/me`                                   | Licence, zone, payout details          |
+| POST   | `/riders/me/resubmit`                          | Rejected applicant, back to the queue  |
+| GET    | `/riders/me/documents`                         | Own documents and review state         |
+| PUT    | `/riders/me/documents`                         | Upload or replace one document         |
+| PATCH  | `/riders/me/availability`                      | Online · offline · on break            |
+| PUT    | `/riders/me/location`                          | Position ping (204, no body)           |
+| GET    | `/riders/me/offers`                            | `liveOnly=true` for the inbox          |
+| POST   | `/riders/me/offers/:id/accept` · `/reject`     | Answer an offer                        |
+| GET    | `/riders/me/deliveries` · `/:orderId`          | History, and the run in hand           |
+| POST   | `/riders/me/deliveries/:orderId/pickup`        | Collect + issue the delivery code      |
+| POST   | `/riders/me/deliveries/:orderId/on-the-way`    | Leave the restaurant                   |
+| POST   | `/riders/me/deliveries/:orderId/confirm`       | Close the delivery against the code    |
+| GET    | `/riders/me/earnings` · `/earnings/summary`    | Itemised ledger, and the headline      |
+| GET    | `/riders/me/settlements`                       | Balance with each restaurant           |
+| GET    | `/riders/me/settlements/entries` · `/payments` | Per-order statement, money moved       |
+| POST   | `/riders/me/settlements/fees-received`         | Confirm a restaurant paid my fees      |
+
+Restaurant side, for the owner and kitchen staff (`assertCanManage`):
+
+| Method | Path                                                       | Who                              |
+| ------ | ---------------------------------------------------------- | -------------------------------- |
+| GET    | `/restaurants/:id/rider-settlements`                       | Balance with each rider          |
+| GET    | `/restaurants/:id/rider-settlements/entries` · `/payments` | Per-order statement              |
+| POST   | `/restaurants/:id/rider-settlements/cash-received`         | Confirm cash a rider handed over |
 
 Operator side, guarded by permission rather than role — a dispatcher can hold
-`orders.assign` without also being able to approve riders or move their money.
+`orders.assign` without also being able to approve riders.
 
-| Method | Path                                                              | Permission        |
-| ------ | ----------------------------------------------------------------- | ----------------- |
-| GET    | `/rider-management/riders` · `/riders/:id` · `/:id/documents`     | `drivers.read`    |
-| POST   | `/rider-management/riders/:id/approve` · `/reject`                | `drivers.approve` |
-| POST   | `/rider-management/riders/:id/suspend` · `/reinstate`             | `drivers.suspend` |
-| POST   | `/rider-management/documents/:id/verify` · `/reject`              | `drivers.approve` |
-| POST   | `/rider-management/orders/:orderId/assign`                        | `orders.assign`   |
-| GET    | `/rider-management/assignments` · `/riders/:id/assignments`       | `orders.read`     |
-| POST   | `/rider-management/assignments/:id/cancel` · `/expire`            | `orders.assign`   |
-| GET    | `/rider-management/withdrawals`                                   | `payouts.read`    |
-| POST   | `/rider-management/withdrawals/:id/approve` · `/paid` · `/reject` | `payouts.approve` |
+| Method | Path                                                          | Permission        |
+| ------ | ------------------------------------------------------------- | ----------------- |
+| GET    | `/rider-management/riders` · `/riders/:id` · `/:id/documents` | `drivers.read`    |
+| POST   | `/rider-management/riders/:id/approve` · `/reject`            | `drivers.approve` |
+| POST   | `/rider-management/riders/:id/suspend` · `/reinstate`         | `drivers.suspend` |
+| POST   | `/rider-management/documents/:id/verify` · `/reject`          | `drivers.approve` |
+| POST   | `/rider-management/orders/:orderId/assign`                    | `orders.assign`   |
+| GET    | `/rider-management/assignments` · `/riders/:id/assignments`   | `orders.read`     |
+| POST   | `/rider-management/assignments/:id/cancel` · `/expire`        | `orders.assign`   |
 
 #### Onboarding
 
@@ -773,27 +778,33 @@ offering a way around. Five wrong codes burn it, and every failed attempt is
 counted even though the request failed — an uncounted wrong guess is an
 unlimited one.
 
-#### Earnings and payouts
+#### Earnings and rider↔restaurant cash
 
-A completed delivery is paid **itemised**: base fare, distance and tip are
-separate ledger rows, so "why was this run only 90 rupees" is answerable from
-the record instead of by recomputing history. A fare floor tops short runs up
-without hiding what the base and distance came to. The tip is passed through as
-its own line — it is the customer's money, not the platform's — and is
-deliberately left out of the quote a rider sees before accepting, because a
-customer can still change it.
+The platform never holds order money, so it never pays riders either. A rider
+keeps each order's **delivery fee and tip** — recorded as separate
+`driver_earnings` rows (`DELIVERY_FEE`, `TIP`) so the earnings screen still
+shows what they made. The offer quote is the delivery fee alone, because the
+customer can still change the tip.
 
-The order is closed before the money moves: if the payout fails, the delivery is
-still recorded, and an unpaid earning is a support ticket rather than a customer
-whose order is stuck `ON_THE_WAY` forever. Crediting is idempotent on the order,
-so a rider tapping twice on a bad connection is not paid twice.
+Confirming a delivery writes one `rider_ledger_entries` row per order:
 
-A withdrawal debits the wallet the moment it is requested, so the money cannot
-be spent while an operator is still deciding; rejecting or cancelling puts it
-back with a matching ledger entry. Approval and payment are separate steps —
-they happen at different times and by different hands, and collapsing them would
-record money as sent before anyone had sent it. References (`WDR-260810-0001`)
-come from a Postgres sequence, for the same reason order numbers do.
+- **The rider collected the payment** — cash on delivery, or a scan-to-pay
+  transfer to the rider's own QR: `collected = total`, and the rider owes the
+  restaurant `total − fee`.
+- **The restaurant was paid directly** — its own QR, or a gateway:
+  `collected = 0`, and the restaurant owes the rider the fee.
+
+Entries net into a running balance per rider–restaurant pair. Money that later
+changes hands is a `rider_settlements` row recorded **only by the side that
+received it**: the restaurant confirms cash a rider handed over, the rider
+confirms fees a restaurant paid. A settlement cannot exceed what is owed in its
+direction; the balance is re-read under a per-pair advisory lock, so two people
+recording the same handover cannot push it past zero.
+
+The order is closed before the ledger is written: if that write fails, the
+delivery is still recorded and a missing entry is a support ticket rather than a
+customer whose order is stuck `ON_THE_WAY`. The entry is unique on the order, so
+a rider tapping twice on a bad connection is not counted twice.
 
 ---
 
@@ -1310,7 +1321,8 @@ erDiagram
     DRIVER ||--o{ DRIVER_DOCUMENT : "files"
     DRIVER ||--o{ DELIVERY_ASSIGNMENT : "offered"
     DRIVER ||--o{ DRIVER_EARNING : "earns"
-    DRIVER ||--o{ PAYOUT_REQUEST : "withdraws"
+    DRIVER ||--o{ RIDER_LEDGER_ENTRY : "owes / is owed"
+    DRIVER ||--o{ RIDER_SETTLEMENT : "settles"
     DRIVER ||--o{ ORDER : "delivers"
     ORDER ||--o{ DELIVERY_ASSIGNMENT : "dispatched by"
     DELIVERY_ASSIGNMENT ||--o{ DRIVER_EARNING : "pays"
@@ -1338,18 +1350,18 @@ erDiagram
 
 ### Domains
 
-| Domain            | Tables                                                                                                                                                |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity & access | `users`, `roles`, `permissions`, `role_permissions`, `user_role_assignments`                                                                          |
-| Geography         | `cities`, `zones`, `delivery_fees`, `addresses`                                                                                                       |
-| Restaurants       | `restaurants`, `restaurant_categories`, `restaurant_category_assignments`, `restaurant_images`, `restaurant_hours`                                    |
-| Menu              | `menus`, `menu_categories`, `menu_items`, `menu_variants`, `add_on_groups`, `add_ons`                                                                 |
-| Delivery          | `drivers`, `vehicles`, `driver_documents`, `delivery_assignments`                                                                                     |
-| Orders            | `orders`, `order_items`, `order_item_add_ons`, `order_status_history`                                                                                 |
-| Money             | `payments`, `transactions`, `wallets`, `wallet_transactions`, `coupons`, `coupon_redemptions`, `driver_earnings`, `payout_requests`, `webhook_events` |
-| Engagement        | `favorites`, `reviews`, `notifications`, `device_tokens`, `broadcasts`                                                                                |
-| Operations        | `support_tickets`, `support_ticket_messages`, `audit_logs`                                                                                            |
-| Content           | `banners`, `settings`, `faqs`                                                                                                                         |
+| Domain            | Tables                                                                                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity & access | `users`, `roles`, `permissions`, `role_permissions`, `user_role_assignments`                                                                                                    |
+| Geography         | `cities`, `zones`, `delivery_fees`, `addresses`                                                                                                                                 |
+| Restaurants       | `restaurants`, `restaurant_categories`, `restaurant_category_assignments`, `restaurant_images`, `restaurant_hours`                                                              |
+| Menu              | `menus`, `menu_categories`, `menu_items`, `menu_variants`, `add_on_groups`, `add_ons`                                                                                           |
+| Delivery          | `drivers`, `vehicles`, `driver_documents`, `delivery_assignments`                                                                                                               |
+| Orders            | `orders`, `order_items`, `order_item_add_ons`, `order_status_history`                                                                                                           |
+| Money             | `payments`, `transactions`, `wallets`, `wallet_transactions`, `coupons`, `coupon_redemptions`, `driver_earnings`, `rider_ledger_entries`, `rider_settlements`, `webhook_events` |
+| Engagement        | `favorites`, `reviews`, `notifications`, `device_tokens`, `broadcasts`                                                                                                          |
+| Operations        | `support_tickets`, `support_ticket_messages`, `audit_logs`                                                                                                                      |
+| Content           | `banners`, `settings`, `faqs`                                                                                                                                                   |
 
 ### Design rules
 
