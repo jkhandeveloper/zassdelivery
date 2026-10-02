@@ -30,7 +30,9 @@ RUN npx prisma generate && npm run build
 # ---- Production dependencies only ---------------------------
 FROM base AS prod-deps
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# --ignore-scripts: the `prepare` script runs husky, a dev dependency that is
+# not installed here, so without it the install fails with "husky: not found".
+RUN npm ci --omit=dev --ignore-scripts
 COPY prisma ./prisma
 # Regenerate the client against the pruned tree so @prisma/client is wired up.
 RUN npx prisma generate

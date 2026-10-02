@@ -49,7 +49,16 @@ describe('Health (e2e)', () => {
 
   describe('GET /api/v1/health', () => {
     it('includes the memory heap check alongside the dependencies', async () => {
+      // ts-jest compiles the whole application inside this process, which puts
+      // the heap past the 512 MB limit a deployed instance never comes near.
+      // Report a realistic figure so the probe is judged on its wiring.
+      const heap = jest
+        .spyOn(process, 'memoryUsage')
+        .mockReturnValue({ ...process.memoryUsage(), heapUsed: 128 * 1024 * 1024 });
+
       const response = await request(server).get('/api/v1/health').expect(200);
+
+      heap.mockRestore();
 
       expect(Object.keys(response.body.info as Record<string, unknown>).sort()).toEqual([
         'database',
