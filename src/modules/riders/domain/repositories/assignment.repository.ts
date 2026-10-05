@@ -104,6 +104,13 @@ export abstract class AssignmentRepository {
   /** Withdraws an offer or an acceptance, freeing the order for re-dispatch. */
   abstract cancel(assignmentId: string, reason: string): Promise<AssignmentWithOrder>;
 
+  /**
+   * Closes whatever is still open on an order that has ended without the rider
+   * confirming it — the business marked it delivered, or it was cancelled — and
+   * puts the rider back in the pool. Returns how many assignments were closed.
+   */
+  abstract releaseForClosedOrder(orderId: string, reason: string): Promise<number>;
+
   /** Marks unanswered offers past their deadline as EXPIRED. Returns the count. */
   abstract expireStale(now: Date): Promise<number>;
 

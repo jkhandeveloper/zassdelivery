@@ -57,6 +57,7 @@ function candidate(overrides: Record<string, unknown> = {}) {
     lastLocationAt: new Date(),
     rating: 4.5,
     hasRejectedThisOrder: false,
+    ignoredOffersForThisOrder: 0,
     ...overrides,
   };
 }

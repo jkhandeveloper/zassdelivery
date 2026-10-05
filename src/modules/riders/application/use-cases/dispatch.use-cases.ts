@@ -211,6 +211,7 @@ export class AssignOrderUseCase {
           lastLocationAt: rider.lastLocationAt,
           rating: Number(rider.rating),
           hasRejectedThisOrder: false,
+          ignoredOffersForThisOrder: 0,
         },
       ],
       pickupLat,

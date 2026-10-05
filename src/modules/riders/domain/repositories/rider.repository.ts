@@ -147,6 +147,7 @@ export abstract class RiderRepository {
       lastLocationAt: Date | null;
       rating: number;
       hasRejectedThisOrder: boolean;
+      ignoredOffersForThisOrder: number;
     }>
   >;
 

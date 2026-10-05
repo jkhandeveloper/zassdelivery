@@ -37,6 +37,7 @@ function event(overrides: Partial<OrderStatusEventPayload> = {}): OrderStatusEve
 function build(options: { waiting?: string[]; expired?: number } = {}) {
   const assignments = {
     findOrderIdsAwaitingDispatch: jest.fn().mockResolvedValue(options.waiting ?? []),
+    releaseForClosedOrder: jest.fn().mockResolvedValue(1),
   } as unknown as jest.Mocked<AssignmentRepository>;
 
   const assign = {
@@ -175,5 +176,45 @@ describe('DispatchCoordinator — the sweep', () => {
     await coordinator.sweep();
 
     expect(expireOffers.execute).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('DispatchCoordinator — an order closed by someone other than its rider', () => {
+  it('releases the rider when the business marks the order delivered', async () => {
+    const { coordinator, assignments } = build();
+
+    await coordinator.onOrderClosed(
+      event({ status: OrderStatus.DELIVERED, actor: ActorType.RESTAURANT }),
+    );
+
+    expect(assignments.releaseForClosedOrder).toHaveBeenCalledWith('order-1', expect.any(String));
+  });
+
+  it('releases the rider when the order is cancelled', async () => {
+    const { coordinator, assignments } = build();
+
+    await coordinator.onOrderClosed(
+      event({ status: OrderStatus.CANCELLED, actor: ActorType.ADMIN }),
+    );
+
+    expect(assignments.releaseForClosedOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the rider's own confirmed delivery alone — that completes itself", async () => {
+    const { coordinator, assignments } = build();
+
+    await coordinator.onOrderClosed(
+      event({ status: OrderStatus.DELIVERED, actor: ActorType.DRIVER }),
+    );
+
+    expect(assignments.releaseForClosedOrder).not.toHaveBeenCalled();
+  });
+
+  it('does nothing while the order is still moving', async () => {
+    const { coordinator, assignments } = build();
+
+    await coordinator.onOrderClosed(event({ status: OrderStatus.PREPARING }));
+
+    expect(assignments.releaseForClosedOrder).not.toHaveBeenCalled();
   });
 });

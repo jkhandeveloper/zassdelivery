@@ -14,6 +14,14 @@ export interface DispatchCandidate {
   rating: number;
   /** Assignments this rider has already turned down for this order. */
   hasRejectedThisOrder: boolean;
+  /**
+   * Offers for this order the rider let run out without answering.
+   *
+   * Not a disqualification like a rejection — they may simply have missed it —
+   * but without it a rider who left the app online and walked away is the best
+   * candidate again on every retry, and the order never reaches anyone else.
+   */
+  ignoredOffersForThisOrder: number;
 }
 
 export interface RankedCandidate extends DispatchCandidate {
@@ -69,39 +77,47 @@ export class DispatchService {
   ): RankedCandidate[] {
     const freshnessCutoff = new Date(now.getTime() - options.locationFreshnessMinutes * 60_000);
 
-    return candidates
-      .filter((candidate) => !candidate.hasRejectedThisOrder)
-      .map((candidate) => {
-        const hasFreshPosition =
-          candidate.currentLat !== null &&
-          candidate.currentLng !== null &&
-          candidate.lastLocationAt !== null &&
-          candidate.lastLocationAt >= freshnessCutoff;
+    return (
+      candidates
+        .filter((candidate) => !candidate.hasRejectedThisOrder)
+        .map((candidate) => {
+          const hasFreshPosition =
+            candidate.currentLat !== null &&
+            candidate.currentLng !== null &&
+            candidate.lastLocationAt !== null &&
+            candidate.lastLocationAt >= freshnessCutoff;
 
-        const pickupDistanceKm = hasFreshPosition
-          ? haversineKm(
-              candidate.currentLat as number,
-              candidate.currentLng as number,
-              pickupLat,
-              pickupLng,
-            )
-          : null;
+          const pickupDistanceKm = hasFreshPosition
+            ? haversineKm(
+                candidate.currentLat as number,
+                candidate.currentLng as number,
+                pickupLat,
+                pickupLng,
+              )
+            : null;
 
-        return {
-          ...candidate,
-          pickupDistanceKm,
-          score: this.score(candidate, pickupDistanceKm, options),
-        };
-      })
-      .filter(
-        (candidate) =>
-          // A stale position is not a disqualification: a rider whose app has
-          // not reported in for a few minutes is still in the zone and still
-          // wants work. They simply rank below anyone we can actually locate.
-          candidate.pickupDistanceKm === null ||
-          candidate.pickupDistanceKm <= options.searchRadiusKm,
-      )
-      .sort((a, b) => b.score - a.score);
+          return {
+            ...candidate,
+            pickupDistanceKm,
+            score: this.score(candidate, pickupDistanceKm, options),
+          };
+        })
+        .filter(
+          (candidate) =>
+            // A stale position is not a disqualification: a rider whose app has
+            // not reported in for a few minutes is still in the zone and still
+            // wants work. They simply rank below anyone we can actually locate.
+            candidate.pickupDistanceKm === null ||
+            candidate.pickupDistanceKm <= options.searchRadiusKm,
+        )
+        // Riders who have not been tried yet come before any who let this order's
+        // offer lapse; among the tried, the one tried least. Score only orders
+        // riders within the same tier, so an absent rider with a perfect score
+        // cannot hold an order hostage.
+        .sort(
+          (a, b) => a.ignoredOffersForThisOrder - b.ignoredOffersForThisOrder || b.score - a.score,
+        )
+    );
   }
 
   private score(

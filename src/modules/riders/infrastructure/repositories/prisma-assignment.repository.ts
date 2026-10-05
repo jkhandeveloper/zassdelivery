@@ -256,6 +256,40 @@ export class PrismaAssignmentRepository extends AssignmentRepository {
     });
   }
 
+  async releaseForClosedOrder(orderId: string, reason: string): Promise<number> {
+    return this.prisma.$transaction(async (tx) => {
+      const open = await tx.deliveryAssignment.findMany({
+        where: { orderId, status: { in: LIVE_STATUSES } },
+        select: { id: true, driverId: true },
+      });
+
+      if (open.length === 0) {
+        return 0;
+      }
+
+      await tx.deliveryAssignment.updateMany({
+        where: { id: { in: open.map((assignment) => assignment.id) } },
+        data: {
+          status: AssignmentStatus.CANCELLED,
+          respondedAt: new Date(),
+          rejectionReason: reason,
+        },
+      });
+
+      // Unlike `cancel`, the order keeps its `driverId`: it is history now, and
+      // who carried it is part of that. Only the rider's availability moves.
+      await tx.driver.updateMany({
+        where: {
+          id: { in: open.map((assignment) => assignment.driverId) },
+          availability: DriverAvailability.ON_DELIVERY,
+        },
+        data: { availability: DriverAvailability.ONLINE },
+      });
+
+      return open.length;
+    });
+  }
+
   async expireStale(now: Date): Promise<number> {
     const result = await this.prisma.deliveryAssignment.updateMany({
       where: { status: AssignmentStatus.OFFERED, expiresAt: { lte: now } },

@@ -235,6 +235,7 @@ export class PrismaRiderRepository extends RiderRepository {
       lastLocationAt: Date | null;
       rating: number;
       hasRejectedThisOrder: boolean;
+      ignoredOffersForThisOrder: number;
     }>
   > {
     // Every filter that can be expressed in SQL is: ranking is cheap, but
@@ -259,9 +260,11 @@ export class PrismaRiderRepository extends RiderRepository {
         lastLocationAt: true,
         rating: true,
         assignments: {
-          where: { orderId, status: AssignmentStatus.REJECTED },
-          select: { id: true },
-          take: 1,
+          where: {
+            orderId,
+            status: { in: [AssignmentStatus.REJECTED, AssignmentStatus.EXPIRED] },
+          },
+          select: { status: true },
         },
       },
       // A cap keeps a busy evening from loading the whole roster; ranking only
@@ -276,7 +279,12 @@ export class PrismaRiderRepository extends RiderRepository {
       currentLng: candidate.currentLng,
       lastLocationAt: candidate.lastLocationAt,
       rating: Number(candidate.rating),
-      hasRejectedThisOrder: candidate.assignments.length > 0,
+      hasRejectedThisOrder: candidate.assignments.some(
+        (assignment) => assignment.status === AssignmentStatus.REJECTED,
+      ),
+      ignoredOffersForThisOrder: candidate.assignments.filter(
+        (assignment) => assignment.status === AssignmentStatus.EXPIRED,
+      ).length,
     }));
   }
 

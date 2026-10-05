@@ -1,7 +1,7 @@
 import { Inject, Injectable, type LoggerService } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { OrderStatus } from '@prisma/client';
+import { ActorType, OrderStatus } from '@prisma/client';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
@@ -34,6 +34,14 @@ const DISPATCHABLE_STATUSES: OrderStatus[] = [
  * the interval it runs on.
  */
 const SWEEP_BATCH_SIZE = 20;
+
+/** Statuses after which an order never moves again. */
+const CLOSED_STATUSES: OrderStatus[] = [
+  OrderStatus.DELIVERED,
+  OrderStatus.CANCELLED,
+  OrderStatus.REJECTED,
+  OrderStatus.FAILED,
+];
 
 /**
  * Gets orders into riders' hands without anybody pressing a button.
@@ -87,6 +95,50 @@ export class DispatchCoordinator {
     }
 
     await this.offer(event.orderId, event.orderNumber);
+  }
+
+  /**
+   * An order that ended without its rider being the one to end it.
+   *
+   * The business may mark an order delivered, and support may cancel one, while
+   * a rider still holds it. The rider's own confirmation is the only other
+   * thing that completes an assignment, so without this the assignment stays
+   * ACCEPTED for good and the rider stays ON_DELIVERY — which dispatch reads as
+   * "carrying something", and never offers them work again.
+   *
+   */
+  @OnEvent(OrderEvents.statusChanged, { async: true })
+  async onOrderClosed(event: OrderStatusEventPayload): Promise<void> {
+    if (!CLOSED_STATUSES.includes(event.status)) {
+      return;
+    }
+
+    // The rider's own confirmation completes the assignment itself, a moment
+    // after this event. Cancelling it here first would turn a finished run into
+    // a cancelled one.
+    if (event.status === OrderStatus.DELIVERED && event.actor === ActorType.DRIVER) {
+      return;
+    }
+
+    try {
+      const released = await this.assignments.releaseForClosedOrder(
+        event.orderId,
+        `The order was ${event.status.toLowerCase()} before the rider confirmed it.`,
+      );
+
+      if (released > 0) {
+        this.logger.log?.(
+          `Order ${event.orderNumber} closed as ${event.status}; released ${released} assignment(s)`,
+          this.context,
+        );
+      }
+    } catch (error) {
+      this.logger.error?.(
+        `Could not release the rider on order ${event.orderNumber}: ${(error as Error).message}`,
+        (error as Error).stack,
+        this.context,
+      );
+    }
   }
 
   /**

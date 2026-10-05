@@ -28,6 +28,7 @@ function candidate(overrides: Partial<DispatchCandidate> = {}): DispatchCandidat
     lastLocationAt: FRESH,
     rating: 4,
     hasRejectedThisOrder: false,
+    ignoredOffersForThisOrder: 0,
     ...overrides,
   };
 }
@@ -54,6 +55,36 @@ describe('DispatchService.rank', () => {
     );
 
     expect(ranked).toEqual([]);
+  });
+
+  it('tries a rider who has not seen the order before one who let its offer lapse', () => {
+    // The absent rider is on the doorstep, in the home zone, with a better
+    // rating — everything the score rewards — and still goes second.
+    const absent = candidate({ driverId: 'absent', rating: 5, ignoredOffersForThisOrder: 3 });
+    const fresh = candidate({
+      driverId: 'fresh',
+      zoneId: null,
+      currentLat: null,
+      currentLng: null,
+      lastLocationAt: null,
+      rating: 0,
+    });
+
+    const ranked = service.rank([absent, fresh], PICKUP_LAT, PICKUP_LNG, OPTIONS, NOW);
+
+    expect(ranked.map((entry) => entry.driverId)).toEqual(['fresh', 'absent']);
+  });
+
+  it('still offers to a rider who let it lapse when nobody else is free', () => {
+    const ranked = service.rank(
+      [candidate({ driverId: 'only', ignoredOffersForThisOrder: 2 })],
+      PICKUP_LAT,
+      PICKUP_LNG,
+      OPTIONS,
+      NOW,
+    );
+
+    expect(ranked.map((entry) => entry.driverId)).toEqual(['only']);
   });
 
   it('excludes a rider beyond the search radius', () => {
