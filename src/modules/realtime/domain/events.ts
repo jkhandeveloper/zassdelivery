@@ -23,6 +23,8 @@ export const ServerEvents = {
   riderAssigned: 'rider:assigned',
   /** A delivery has been offered to this rider. */
   deliveryOffered: 'delivery:offered',
+  /** The run this rider holds moved on, or ended. */
+  deliveryUpdated: 'delivery:updated',
 
   /** A new ticket for the kitchen. */
   restaurantOrder: 'restaurant:order',
@@ -116,6 +118,19 @@ export interface DeliveryOfferedPayload {
   estimatedEarning: number;
   pickupDistanceKm: number | null;
   expiresAt: string;
+}
+
+/**
+ * Deliberately thin: a prompt to refetch, not a copy of the run. The rider's
+ * screens read the assignment, their availability and their earnings, and all
+ * three change together — sending one of them here would invite a client to
+ * patch its cache from it and leave the other two stale.
+ */
+export interface DeliveryUpdatedPayload {
+  orderId: string;
+  orderNumber: string;
+  status: OrderStatus;
+  at: string;
 }
 
 export interface RestaurantOrderPayload {

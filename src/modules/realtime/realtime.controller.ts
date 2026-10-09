@@ -137,6 +137,13 @@ export class RealtimeController {
           room: 'rider:<driverId>',
         },
         {
+          event: ServerEvents.deliveryUpdated,
+          description:
+            'The run you hold moved on or ended. Refetch your deliveries, ' +
+            'availability and earnings.',
+          room: 'user:<yourId>',
+        },
+        {
           event: ServerEvents.restaurantOrder,
           description: 'A new ticket for the kitchen.',
           room: 'restaurant:<restaurantId>',

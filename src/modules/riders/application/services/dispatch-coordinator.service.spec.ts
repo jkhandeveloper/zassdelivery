@@ -3,6 +3,7 @@ import { ActorType, OrderStatus } from '@prisma/client';
 
 import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
 import type { OrderStatusEventPayload } from '@/modules/orders/domain/events/order.events';
+import type { RealtimeService } from '@/modules/realtime/application/realtime.service';
 
 import type { AssignmentRepository } from '../../domain/repositories/assignment.repository';
 import type { AssignOrderUseCase, ExpireOffersUseCase } from '../use-cases/dispatch.use-cases';
@@ -48,11 +49,14 @@ function build(options: { waiting?: string[]; expired?: number } = {}) {
     execute: jest.fn().mockResolvedValue({ expired: options.expired ?? 0 }),
   } as unknown as jest.Mocked<ExpireOffersUseCase>;
 
+  const realtime = { deliveryUpdated: jest.fn() } as unknown as jest.Mocked<RealtimeService>;
+
   return {
     assignments,
     assign,
     expireOffers,
-    coordinator: new DispatchCoordinator(assignments, assign, expireOffers, logger),
+    realtime,
+    coordinator: new DispatchCoordinator(assignments, assign, expireOffers, realtime, logger),
   };
 }
 
@@ -216,5 +220,54 @@ describe('DispatchCoordinator — an order closed by someone other than its ride
     await coordinator.onOrderClosed(event({ status: OrderStatus.PREPARING }));
 
     expect(assignments.releaseForClosedOrder).not.toHaveBeenCalled();
+  });
+
+  it('tells the rider holding the order when the kitchen moves it on', async () => {
+    const { coordinator, realtime } = build();
+
+    await coordinator.onOrderClosed(
+      event({ status: OrderStatus.READY_FOR_PICKUP, driverUserId: 'user-9' }),
+    );
+
+    expect(realtime.deliveryUpdated).toHaveBeenCalledWith(
+      'user-9',
+      expect.objectContaining({ orderId: 'order-1', status: OrderStatus.READY_FOR_PICKUP }),
+    );
+  });
+
+  it('tells the rider once they are released from an order closed for them', async () => {
+    const { coordinator, assignments, realtime } = build();
+
+    assignments.releaseForClosedOrder.mockImplementation(() => {
+      expect(realtime.deliveryUpdated).not.toHaveBeenCalled();
+      return Promise.resolve(1);
+    });
+
+    await coordinator.onOrderClosed(
+      event({ status: OrderStatus.DELIVERED, actor: ActorType.RESTAURANT, driverUserId: 'user-9' }),
+    );
+
+    expect(realtime.deliveryUpdated).toHaveBeenCalledWith(
+      'user-9',
+      expect.objectContaining({ status: OrderStatus.DELIVERED }),
+    );
+  });
+
+  it("stays quiet on the rider's own confirmation, which announces itself", async () => {
+    const { coordinator, realtime } = build();
+
+    await coordinator.onOrderClosed(
+      event({ status: OrderStatus.DELIVERED, actor: ActorType.DRIVER, driverUserId: 'user-9' }),
+    );
+
+    expect(realtime.deliveryUpdated).not.toHaveBeenCalled();
+  });
+
+  it('has nobody to tell before a rider has accepted', async () => {
+    const { coordinator, realtime } = build();
+
+    await coordinator.onOrderClosed(event({ status: OrderStatus.PREPARING }));
+
+    expect(realtime.deliveryUpdated).not.toHaveBeenCalled();
   });
 });

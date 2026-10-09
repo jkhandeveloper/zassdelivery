@@ -1353,6 +1353,40 @@ async function seedContent(): Promise<void> {
         'list; an empty list means no vendor can pay until one is added.',
     },
     {
+      key: 'delivery.per_km_fee',
+      value: '50',
+      valueType: SettingValueType.NUMBER,
+      group: 'delivery',
+      isPublic: true,
+      description:
+        'Delivery fee per kilometre between the business and the customer, in PKR. ' +
+        'The rider keeps it.',
+    },
+    {
+      key: 'delivery.min_fee',
+      value: '50',
+      valueType: SettingValueType.NUMBER,
+      group: 'delivery',
+      isPublic: true,
+      description: 'The least a delivery costs, however short the run, in PKR.',
+    },
+    {
+      key: 'delivery.max_fee',
+      value: '150',
+      valueType: SettingValueType.NUMBER,
+      group: 'delivery',
+      isPublic: true,
+      description: 'The most a delivery costs, in PKR.',
+    },
+    {
+      key: 'delivery.max_distance_km',
+      value: '3',
+      valueType: SettingValueType.NUMBER,
+      group: 'delivery',
+      isPublic: true,
+      description: 'Orders are not delivered further than this from the business, in kilometres.',
+    },
+    {
       key: 'dispatch.offer_timeout_seconds',
       value: '60',
       valueType: SettingValueType.NUMBER,

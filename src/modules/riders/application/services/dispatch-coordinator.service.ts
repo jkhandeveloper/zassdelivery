@@ -10,6 +10,8 @@ import {
   type OrderStatusEventPayload,
 } from '@/modules/orders/domain/events/order.events';
 
+import { RealtimeService } from '@/modules/realtime/application/realtime.service';
+
 import { AssignmentRepository } from '../../domain/repositories/assignment.repository';
 import { AssignOrderUseCase, ExpireOffersUseCase } from '../use-cases/dispatch.use-cases';
 
@@ -76,6 +78,7 @@ export class DispatchCoordinator {
     private readonly assignments: AssignmentRepository,
     private readonly assign: AssignOrderUseCase,
     private readonly expireOffers: ExpireOffersUseCase,
+    private readonly realtime: RealtimeService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -106,17 +109,22 @@ export class DispatchCoordinator {
    * ACCEPTED for good and the rider stays ON_DELIVERY — which dispatch reads as
    * "carrying something", and never offers them work again.
    *
+   * Either way the rider is told, so the run on their dashboard moves without
+   * a refresh: straight away for a step along the way, and only once they have
+   * been released for an order that closed under them.
    */
   @OnEvent(OrderEvents.statusChanged, { async: true })
   async onOrderClosed(event: OrderStatusEventPayload): Promise<void> {
-    if (!CLOSED_STATUSES.includes(event.status)) {
+    // The rider's own confirmation completes the assignment itself, a moment
+    // after this event. Cancelling it here first would turn a finished run into
+    // a cancelled one — and telling them now would have their app refetch a run
+    // that is not finished yet. That path announces itself once it is.
+    if (event.status === OrderStatus.DELIVERED && event.actor === ActorType.DRIVER) {
       return;
     }
 
-    // The rider's own confirmation completes the assignment itself, a moment
-    // after this event. Cancelling it here first would turn a finished run into
-    // a cancelled one.
-    if (event.status === OrderStatus.DELIVERED && event.actor === ActorType.DRIVER) {
+    if (!CLOSED_STATUSES.includes(event.status)) {
+      this.tellRider(event);
       return;
     }
 
@@ -139,6 +147,21 @@ export class DispatchCoordinator {
         this.context,
       );
     }
+
+    this.tellRider(event);
+  }
+
+  private tellRider(event: OrderStatusEventPayload): void {
+    if (event.driverUserId === null) {
+      return;
+    }
+
+    this.realtime.deliveryUpdated(event.driverUserId, {
+      orderId: event.orderId,
+      orderNumber: event.orderNumber,
+      status: event.status,
+      at: event.at,
+    });
   }
 
   /**

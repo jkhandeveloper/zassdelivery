@@ -4,6 +4,7 @@ import { AssignmentStatus, OrderStatus } from '@prisma/client';
 import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
 import type { AuthenticatedUser } from '@/common/interfaces/authenticated-user.interface';
 import { AdvanceOrderUseCase } from '@/modules/orders/application/use-cases/order-lifecycle.use-cases';
+import { RealtimeService } from '@/modules/realtime/application/realtime.service';
 
 import { AssignmentRepository } from '../../domain/repositories/assignment.repository';
 import { DeliveryNotificationPort } from '../../domain/repositories/delivery-notification.port';
@@ -101,6 +102,7 @@ export class ConfirmDeliveryUseCase {
     private readonly otp: DeliveryOtpService,
     private readonly finance: RiderFinanceRepository,
     private readonly earnings: EarningsCalculator,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /**
@@ -159,15 +161,29 @@ export class ConfirmDeliveryUseCase {
       tipAmount: Number(assignment.order.tipAmount),
     });
 
-    const recorded = await this.finance.recordDelivery({
-      driverId: rider.id,
-      restaurantId: assignment.order.restaurant.id,
-      orderId: assignment.order.id,
-      assignmentId: assignment.id,
-      totalAmount: Number(assignment.order.totalAmount),
-      components: breakdown.components,
-      total: breakdown.total,
-    });
+    const recorded = await this.finance
+      .recordDelivery({
+        driverId: rider.id,
+        restaurantId: assignment.order.restaurant.id,
+        orderId: assignment.order.id,
+        assignmentId: assignment.id,
+        totalAmount: Number(assignment.order.totalAmount),
+        components: breakdown.components,
+        total: breakdown.total,
+      })
+      .finally(() => {
+        // Sent only now, not with the order's own DELIVERED event: that one
+        // fires before the assignment is completed and the earnings written,
+        // and a dashboard refetching on it reads the run as still in hand and
+        // today's total as it was. Sent even if the ledger write failed — the
+        // run is over either way, and the rider's other screens should say so.
+        this.realtime.deliveryUpdated(rider.userId, {
+          orderId: assignment.order.id,
+          orderNumber: assignment.order.orderNumber,
+          status: OrderStatus.DELIVERED,
+          at: new Date().toISOString(),
+        });
+      });
 
     const earnedAt = new Date();
     const owedToRestaurant = Math.max(0, recorded.net);

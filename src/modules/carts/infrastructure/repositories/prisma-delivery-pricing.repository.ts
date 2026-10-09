@@ -9,6 +9,7 @@ import {
   DeliveryPricingRepository,
   type DeliveryQuote,
 } from '../../domain/repositories/cart.repository';
+import { DELIVERY_FEE_SETTINGS, distanceFee } from '../../domain/services/delivery-fee.policy';
 
 @Injectable()
 export class PrismaDeliveryPricingRepository extends DeliveryPricingRepository {
@@ -34,17 +35,38 @@ export class PrismaDeliveryPricingRepository extends DeliveryPricingRepository {
 
     const distanceKm = distanceMeters / 1000;
 
+    const [perKmFee, minFee, maxFee, maxDistanceKm] = await Promise.all([
+      this.numericSetting(
+        DELIVERY_FEE_SETTINGS.perKmFee.key,
+        DELIVERY_FEE_SETTINGS.perKmFee.fallback,
+      ),
+      this.numericSetting(DELIVERY_FEE_SETTINGS.minFee.key, DELIVERY_FEE_SETTINGS.minFee.fallback),
+      this.numericSetting(DELIVERY_FEE_SETTINGS.maxFee.key, DELIVERY_FEE_SETTINGS.maxFee.fallback),
+      this.numericSetting(
+        DELIVERY_FEE_SETTINGS.maxDistanceKm.key,
+        DELIVERY_FEE_SETTINGS.maxDistanceKm.fallback,
+      ),
+    ]);
+
+    // Priced by the kilometre, and null past the platform's own limit — which
+    // applies on top of the restaurant's radius, whichever is the shorter.
+    const fee = distanceFee(distanceKm, { perKmFee, minFee, maxFee, maxDistanceKm });
+
+    if (fee === null) {
+      return null;
+    }
+
     const zone = await this.prisma.zone.findUnique({
       where: { id: zoneId },
-      select: { deliveryFee: true, etaMinutes: true, isActive: true },
+      select: { etaMinutes: true, isActive: true },
     });
 
     if (!zone || !zone.isActive) {
       return null;
     }
 
-    // The matching distance band wins; the zone's flat fee is the fallback when
-    // the distance falls outside every configured band.
+    // The zone's bands no longer set the fee; the one covering this distance
+    // still says how large a basket has to be for delivery to be free.
     const band = await this.prisma.deliveryFee.findFirst({
       where: {
         zoneId,
@@ -53,27 +75,15 @@ export class PrismaDeliveryPricingRepository extends DeliveryPricingRepository {
         maxDistanceKm: { gte: distanceKm },
       },
       orderBy: { minDistanceKm: 'desc' },
+      select: { freeDeliveryThreshold: true },
     });
 
-    if (!band) {
-      return {
-        fee: Number(zone.deliveryFee),
-        freeDeliveryThreshold: null,
-        distanceKm: Math.round(distanceKm * 100) / 100,
-        etaMinutes: zone.etaMinutes,
-        zoneId,
-      };
-    }
-
-    // Per-km charges apply only to the distance beyond where the band starts,
-    // so a 6.1 km trip is not billed as though all six kilometres were extra.
-    const beyondBandStart = Math.max(0, distanceKm - Number(band.minDistanceKm));
-    const fee = Number(band.baseFee) + Number(band.perKmFee) * beyondBandStart;
-
     return {
-      fee: Math.round(fee * 100) / 100,
+      fee,
       freeDeliveryThreshold:
-        band.freeDeliveryThreshold === null ? null : Number(band.freeDeliveryThreshold),
+        band === null || band.freeDeliveryThreshold === null
+          ? null
+          : Number(band.freeDeliveryThreshold),
       distanceKm: Math.round(distanceKm * 100) / 100,
       etaMinutes: zone.etaMinutes,
       zoneId,

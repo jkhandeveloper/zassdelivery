@@ -5,6 +5,7 @@ import type { Server } from 'socket.io';
 import { ServerEvents } from '../domain/events';
 import type {
   DeliveryOfferedPayload,
+  DeliveryUpdatedPayload,
   NotificationPayload,
   OrderStatusPayload,
   RestaurantOrderPayload,
@@ -100,6 +101,19 @@ export class RealtimeService {
   deliveryOffered(driverId: string, payload: DeliveryOfferedPayload): void {
     this.emit(Rooms.rider(driverId), ServerEvents.deliveryOffered, payload);
     this.emit(Rooms.dispatch(), ServerEvents.deliveryOffered, payload);
+  }
+
+  /**
+   * The run a rider holds changed, to that rider alone.
+   *
+   * `order:status` goes to the order's room, which is where the customer is
+   * watching; a rider's dashboard is not in it, and should not have to join a
+   * room per run to learn that the kitchen is ready or that the business closed
+   * the order for them. Addressed by user rather than by driver id because that
+   * is what an order event carries.
+   */
+  deliveryUpdated(riderUserId: string, payload: DeliveryUpdatedPayload): void {
+    this.emit(Rooms.user(riderUserId), ServerEvents.deliveryUpdated, payload);
   }
 
   // ── Notifications ──────────────────────────────────────────

@@ -11,6 +11,7 @@ import {
 import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
 import type { AuthenticatedUser } from '@/common/interfaces/authenticated-user.interface';
 import type { AdvanceOrderUseCase } from '@/modules/orders/application/use-cases/order-lifecycle.use-cases';
+import type { RealtimeService } from '@/modules/realtime/application/realtime.service';
 
 import type {
   AssignmentRepository,
@@ -101,7 +102,9 @@ function mocks(loaded: AssignmentWithOrder) {
       ),
   } as unknown as jest.Mocked<RiderFinanceRepository>;
 
-  return { access, assignments, advance, notifications, finance };
+  const realtime = { deliveryUpdated: jest.fn() } as unknown as jest.Mocked<RealtimeService>;
+
+  return { access, assignments, advance, notifications, finance, realtime };
 }
 
 describe('PickupOrderUseCase', () => {
@@ -176,6 +179,7 @@ describe('ConfirmDeliveryUseCase', () => {
         otpService,
         parts.finance,
         new EarningsCalculator(),
+        parts.realtime,
       ),
     };
   }
@@ -199,6 +203,23 @@ describe('ConfirmDeliveryUseCase', () => {
         totalAmount: 1240,
         total: 150,
       }),
+    );
+  });
+
+  it('tells the rider once the run is completed and the earnings are written', async () => {
+    const { useCase, finance, assignments, realtime } = build(assignment(issued));
+
+    finance.recordDelivery.mockImplementation(() => {
+      expect(assignments.complete).toHaveBeenCalled();
+      expect(realtime.deliveryUpdated).not.toHaveBeenCalled();
+      return Promise.resolve({ earned: 150, collected: 1240, net: 1090 });
+    });
+
+    await useCase.execute('order-1', { code: '4821' }, RIDER);
+
+    expect(realtime.deliveryUpdated).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({ orderId: 'order-1', status: OrderStatus.DELIVERED }),
     );
   });
 

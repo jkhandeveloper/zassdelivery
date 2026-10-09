@@ -97,8 +97,9 @@ export interface DeliveryQuote {
 /** Resolves what delivery costs for a given basket destination. */
 export abstract class DeliveryPricingRepository {
   /**
-   * Distance-banded fee for delivering from a restaurant to an address.
-   * Returns null when the address lies outside the deliverable area.
+   * Per-kilometre fee for delivering from a restaurant to an address.
+   * Returns null when the address lies outside the deliverable area — beyond
+   * the restaurant's own radius, or the platform's maximum delivery distance.
    */
   abstract quote(
     restaurantLat: number,
