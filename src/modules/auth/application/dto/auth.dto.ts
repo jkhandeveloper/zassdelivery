@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsEmail,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
@@ -44,6 +45,8 @@ export function normalisePhone(value: unknown): unknown {
 
   return digits;
 }
+
+const OTP_CODE_REGEX = /^\d{6}$/;
 
 const PHONE_DOC = {
   description:
@@ -108,6 +111,51 @@ export class RegisterDto {
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
+
+  @ApiPropertyOptional({
+    description:
+      'The six-digit code texted by POST /auth/otp/send with purpose "register". ' +
+      'Required whenever GET /auth/otp/config reports verification as enabled.',
+    example: '482913',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(OTP_CODE_REGEX, { message: 'otpCode must be the six digits we texted you' })
+  otpCode?: string;
+}
+
+export class SendOtpDto {
+  @ApiProperty(PHONE_DOC)
+  @Transform(({ value }: { value: unknown }) => normalisePhone(value))
+  @IsString()
+  @Matches(PK_PHONE_E164_REGEX, {
+    message: 'phone must be a valid Pakistani mobile number, e.g. 03001234567',
+  })
+  phone!: string;
+
+  @ApiProperty({
+    enum: ['register', 'login'],
+    description:
+      'register: the number must not have an account yet. login: it must. ' +
+      'A code is only accepted for the purpose it was sent for.',
+  })
+  @IsIn(['register', 'login'])
+  purpose!: 'register' | 'login';
+}
+
+export class OtpLoginDto {
+  @ApiProperty(PHONE_DOC)
+  @Transform(({ value }: { value: unknown }) => normalisePhone(value))
+  @IsString()
+  @Matches(PK_PHONE_E164_REGEX, {
+    message: 'phone must be a valid Pakistani mobile number, e.g. 03001234567',
+  })
+  phone!: string;
+
+  @ApiProperty({ example: '482913', description: 'The six digits we texted.' })
+  @IsString()
+  @Matches(OTP_CODE_REGEX, { message: 'code must be the six digits we texted you' })
+  code!: string;
 }
 
 export class LoginDto {

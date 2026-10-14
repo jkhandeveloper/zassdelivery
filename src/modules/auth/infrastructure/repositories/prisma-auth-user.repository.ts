@@ -75,6 +75,7 @@ export class PrismaAuthUserRepository extends AuthUserRepository {
           email: input.email ?? null,
           role: input.role,
           status: UserStatus.ACTIVE,
+          phoneVerifiedAt: input.phoneVerified === true ? new Date() : null,
         },
       });
 
@@ -108,6 +109,13 @@ export class PrismaAuthUserRepository extends AuthUserRepository {
     await this.prisma.user.update({
       where: { id: userId },
       data: { lastLoginAt: new Date() },
+    });
+  }
+
+  async markPhoneVerified(userId: string): Promise<void> {
+    await this.prisma.user.updateMany({
+      where: { id: userId, phoneVerifiedAt: null },
+      data: { phoneVerifiedAt: new Date() },
     });
   }
 

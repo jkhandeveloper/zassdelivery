@@ -236,6 +236,26 @@ export class EnvironmentVariables {
   @Max(50)
   PUSH_MAX_FAILURES: number = 5;
 
+  // ── SMS (phone verification codes) ──
+  // textbee sends through an Android phone's SIM — no per-message charge.
+  // Unset: codes are logged in development and verification is off in
+  // production, so sign-up keeps working until a sender is configured.
+  @IsOptional()
+  @IsString()
+  SMS_PROVIDER?: string;
+
+  @IsOptional()
+  @IsString()
+  TEXTBEE_BASE_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  TEXTBEE_API_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  TEXTBEE_DEVICE_ID?: string;
+
   // ── Object storage (MinIO / S3) ──
   // Credentials are absent on a machine without MinIO running, so the pair is
   // optional: uploads report the store as unconfigured rather than crashing the

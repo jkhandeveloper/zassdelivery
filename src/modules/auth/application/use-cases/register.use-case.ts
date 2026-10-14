@@ -11,6 +11,7 @@ import { RefreshTokenRepository } from '../../domain/repositories/refresh-token.
 import type { AuthResponseDto } from '../dto/auth-response.dto';
 import type { RegisterDto } from '../dto/auth.dto';
 import { PasswordService } from '../services/password.service';
+import { PhoneOtpService } from '../services/phone-otp.service';
 import { TokenService } from '../services/token.service';
 import { toAuthResponse } from './auth.mapper';
 
@@ -40,6 +41,7 @@ export class RegisterUseCase {
     private readonly refreshTokens: RefreshTokenRepository,
     private readonly passwords: PasswordService,
     private readonly tokens: TokenService,
+    private readonly otp: PhoneOtpService,
   ) {}
 
   async execute(dto: RegisterDto, context: RegisterContext = {}): Promise<AuthResponseDto> {
@@ -61,6 +63,21 @@ export class RegisterUseCase {
       throw new ResourceConflictException('An account with this email address already exists.');
     }
 
+    // The number is the account's identity and how riders and kitchens reach
+    // the person, so it is proved before the account exists — checked last, so
+    // a code is only spent on a sign-up that would otherwise succeed.
+    const verifyPhone = this.otp.enabled;
+
+    if (verifyPhone) {
+      if (!dto.otpCode) {
+        throw new BusinessRuleViolationException(
+          'Enter the code we texted to your phone to finish signing up.',
+        );
+      }
+
+      await this.otp.verify(dto.phone, 'register', dto.otpCode);
+    }
+
     const passwordHash = await this.passwords.hash(dto.password);
 
     const user = await this.users.create({
@@ -69,6 +86,7 @@ export class RegisterUseCase {
       passwordHash,
       email: dto.email,
       role,
+      phoneVerified: verifyPhone,
     });
 
     // Registering signs the user straight in — requiring an immediate second

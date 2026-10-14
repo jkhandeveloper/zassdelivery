@@ -13,18 +13,23 @@ import {
   AuthResponseDto,
   AuthUserDto,
   MessageResponseDto,
+  OtpSettingsDto,
 } from './application/dto/auth-response.dto';
 import {
   ChangePasswordDto,
   LoginDto,
   LogoutDto,
+  OtpLoginDto,
   RefreshTokenDto,
   RegisterDto,
+  SendOtpDto,
 } from './application/dto/auth.dto';
 import { toAuthUserDto } from './application/use-cases/auth.mapper';
 import { ChangePasswordUseCase } from './application/use-cases/change-password.use-case';
 import { LoginUseCase } from './application/use-cases/login.use-case';
 import { LogoutUseCase } from './application/use-cases/logout.use-case';
+import { OtpLoginUseCase, SendOtpUseCase } from './application/use-cases/otp.use-cases';
+import { PhoneOtpService } from './application/services/phone-otp.service';
 import { RefreshTokenUseCase } from './application/use-cases/refresh-token.use-case';
 import { RegisterUseCase } from './application/use-cases/register.use-case';
 import { AuthUserRepository } from './domain/repositories/auth-user.repository';
@@ -40,7 +45,61 @@ export class AuthController {
     private readonly logoutUseCase: LogoutUseCase,
     private readonly changePasswordUseCase: ChangePasswordUseCase,
     private readonly users: AuthUserRepository,
+    private readonly otp: PhoneOtpService,
+    private readonly sendOtpUseCase: SendOtpUseCase,
+    private readonly otpLoginUseCase: OtpLoginUseCase,
   ) {}
+
+  // ── Phone verification ─────────────────────────────────────
+
+  @Public()
+  @Get('otp/config')
+  @ApiOperation({
+    summary: 'Whether phone verification is on',
+    description:
+      'Read before showing sign-up: when enabled, registration needs a texted ' +
+      'code, and signing in with a code is offered alongside the password.',
+  })
+  @ApiResponse({ status: 200, type: OtpSettingsDto })
+  otpConfig(): OtpSettingsDto {
+    return this.otp.settings();
+  }
+
+  @Public()
+  @Post('otp/send')
+  @HttpCode(HttpStatus.OK)
+  // Per address, on top of the per-number limits the service applies: each
+  // code is a real text from the platform's SIM.
+  @Throttle({ default: { limit: 10, ttl: 3600000 } })
+  @ApiOperation({
+    summary: 'Text a verification code',
+    description:
+      'Six digits, valid for five minutes, one request a minute per number and ' +
+      'a few a day. A sign-up code is refused for a number that already has an ' +
+      'account; a sign-in code for one that does not.',
+  })
+  @ApiResponse({ status: 200, type: OtpSettingsDto })
+  @ApiResponse({ status: 409, description: 'Registering a number that already has an account.' })
+  @ApiResponse({ status: 422, description: 'Too soon, too many today, or the text failed.' })
+  sendOtp(@Body() dto: SendOtpDto): Promise<OtpSettingsDto> {
+    return this.sendOtpUseCase.execute(dto);
+  }
+
+  @Public()
+  @Post('login/otp')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 300000 } })
+  @ApiOperation({
+    summary: 'Sign in with a texted code',
+    description:
+      'The code from POST /auth/otp/send with purpose "login". Also marks the ' +
+      'number as verified.',
+  })
+  @ApiResponse({ status: 200, description: 'Signed in.', type: AuthResponseDto })
+  @ApiResponse({ status: 422, description: 'Wrong, expired or spent code.' })
+  loginWithOtp(@Body() dto: OtpLoginDto, @Req() request: Request): Promise<AuthResponseDto> {
+    return this.otpLoginUseCase.execute(dto, this.contextOf(request));
+  }
 
   @Public()
   @Post('register')
@@ -52,6 +111,8 @@ export class AuthController {
     summary: 'Register a new account',
     description:
       'Creates a CUSTOMER or RIDER account and signs the user in immediately. ' +
+      'When phone verification is on, include the otpCode texted by ' +
+      'POST /auth/otp/send. ' +
       'Staff, vendor and admin accounts are created by an administrator.',
   })
   @ApiResponse({ status: 201, description: 'Account created.', type: AuthResponseDto })

@@ -61,3 +61,21 @@ export class MessageResponseDto {
   @ApiProperty({ example: 'Signed out successfully.' })
   message!: string;
 }
+
+export class OtpSettingsDto {
+  @ApiProperty({
+    description:
+      'Whether this deployment texts verification codes. When false, register ' +
+      'without otpCode and sign in with a password.',
+  })
+  enabled!: boolean;
+
+  @ApiProperty({ example: 6 })
+  codeLength!: number;
+
+  @ApiProperty({ example: 300, description: 'How long a code stays valid.' })
+  expiresInSeconds!: number;
+
+  @ApiProperty({ example: 60, description: 'The wait before another code can be sent.' })
+  resendAfterSeconds!: number;
+}

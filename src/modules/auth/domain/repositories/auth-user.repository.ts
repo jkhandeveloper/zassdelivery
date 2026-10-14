@@ -11,6 +11,8 @@ export interface CreateAuthUserInput {
   passwordHash: string;
   email?: string;
   role: UserRole;
+  /** Set when the person proved they hold the phone with a texted code. */
+  phoneVerified?: boolean;
 }
 
 /**
@@ -28,4 +30,5 @@ export abstract class AuthUserRepository {
   abstract create(input: CreateAuthUserInput): Promise<AuthUserRecord>;
   abstract updatePassword(userId: string, passwordHash: string): Promise<void>;
   abstract recordLogin(userId: string): Promise<void>;
+  abstract markPhoneVerified(userId: string): Promise<void>;
 }

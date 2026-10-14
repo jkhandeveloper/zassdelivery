@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 
 import { DeliveryPricingRepository } from '@/modules/carts/domain/repositories/cart.repository';
+import {
+  DELIVERY_FEE_SETTINGS,
+  type DeliveryFeeRules,
+} from '@/modules/carts/domain/services/delivery-fee.policy';
 
 /**
  * Platform settings this module reads, with the defaults that apply when a key
@@ -9,8 +13,8 @@ import { DeliveryPricingRepository } from '@/modules/carts/domain/repositories/c
  * Every one of these is commercial policy rather than product behaviour — how
  * long a rider has to answer an offer, how far away they may be. Keeping them
  * in the settings table means tuning them is an operator's decision, not a
- * release. What a delivery pays is not here: the rider keeps the order's own
- * delivery fee and tip.
+ * release. The rider keeps the order's own delivery fee and tip; the per-km
+ * rates that fee is priced from are exposed here so a rider can see them.
  */
 export const RIDER_SETTINGS = {
   offerTimeoutSeconds: { key: 'dispatch.offer_timeout_seconds', fallback: 60 },
@@ -36,6 +40,23 @@ export class RiderSettingsService {
     ]);
 
     return { offerTimeoutSeconds, searchRadiusKm, locationFreshnessMinutes };
+  }
+
+  /**
+   * What a run pays, per kilometre and in total.
+   *
+   * Read through the same settings and fallbacks the cart prices with, so the
+   * rate a rider is shown is the rate customers are actually charged.
+   */
+  async deliveryRates(): Promise<DeliveryFeeRules> {
+    const [perKmFee, minFee, maxFee, maxDistanceKm] = await Promise.all([
+      this.read(DELIVERY_FEE_SETTINGS.perKmFee),
+      this.read(DELIVERY_FEE_SETTINGS.minFee),
+      this.read(DELIVERY_FEE_SETTINGS.maxFee),
+      this.read(DELIVERY_FEE_SETTINGS.maxDistanceKm),
+    ]);
+
+    return { perKmFee, minFee, maxFee, maxDistanceKm };
   }
 
   private read(setting: { key: string; fallback: number }): Promise<number> {

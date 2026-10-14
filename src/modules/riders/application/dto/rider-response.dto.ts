@@ -592,3 +592,20 @@ export function toSettlementDto(settlement: SettlementWithContext): RiderSettlem
     createdAt: settlement.createdAt,
   };
 }
+
+export class DeliveryRatesDto {
+  @ApiProperty({
+    example: 50,
+    description: 'Paid per kilometre between the business and the door.',
+  })
+  perKmFee!: number;
+
+  @ApiProperty({ example: 50, description: 'The least a run pays, however short.' })
+  minFee!: number;
+
+  @ApiProperty({ example: 150, description: 'The most a run pays.' })
+  maxFee!: number;
+
+  @ApiProperty({ example: 3, description: 'Orders further than this are not delivered.' })
+  maxDistanceKm!: number;
+}
