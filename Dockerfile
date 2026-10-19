@@ -25,7 +25,10 @@ COPY package.json package-lock.json ./
 COPY tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY prisma ./prisma
 COPY src ./src
-RUN npx prisma generate && npm run build
+# The compile peaks around 830 MB, past Node's default heap on the 1 GB
+# production droplet, where it dies with "heap out of memory". The larger limit
+# lets it spill into the droplet's swap instead. Build stage only.
+RUN npx prisma generate && NODE_OPTIONS=--max-old-space-size=1024 npm run build
 
 # ---- Production dependencies only ---------------------------
 FROM base AS prod-deps
