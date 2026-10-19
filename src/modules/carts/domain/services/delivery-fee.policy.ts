@@ -44,3 +44,40 @@ export function distanceFee(distanceKm: number, rules: DeliveryFeeRules): number
   // cannot push a fee past the cap.
   return Math.min(Math.max(metered, rules.minFee), rules.maxFee);
 }
+
+/** The bounds a rider's own per-kilometre rate must sit within. */
+export const RIDER_RATE_SETTINGS = {
+  min: { key: 'delivery.rider_rate_min', fallback: 10 },
+  max: { key: 'delivery.rider_rate_max', fallback: 500 },
+} as const;
+
+/**
+ * Which riders a customer may choose from: those near enough the business to
+ * reach it, with a position recent enough to trust. The same settings
+ * dispatch searches with, so the list shows the riders who could be offered it.
+ */
+export const RIDER_SEARCH_SETTINGS = {
+  searchRadiusKm: { key: 'dispatch.search_radius_km', fallback: 8 },
+  locationFreshnessMinutes: { key: 'dispatch.location_freshness_minutes', fallback: 10 },
+} as const;
+
+/**
+ * The fee a rider who sets their own rate charges for a run of `distanceKm`,
+ * or null when it is too far to deliver.
+ *
+ * The platform's minimum and distance limit still apply, but not its maximum:
+ * the rider chose the price, the customer chose the rider, and capping it would
+ * make a dearer rider no dearer at all.
+ */
+export function riderFee(
+  distanceKm: number,
+  perKmRate: number,
+  rules: Pick<DeliveryFeeRules, 'minFee' | 'maxDistanceKm'>,
+): number | null {
+  return distanceFee(distanceKm, {
+    perKmFee: perKmRate,
+    minFee: rules.minFee,
+    maxFee: Number.POSITIVE_INFINITY,
+    maxDistanceKm: rules.maxDistanceKm,
+  });
+}

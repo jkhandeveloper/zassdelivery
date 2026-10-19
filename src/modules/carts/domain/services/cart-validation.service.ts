@@ -16,6 +16,7 @@ export type CartIssueCode =
   | 'BELOW_MINIMUM_ORDER'
   | 'NO_ADDRESS'
   | 'OUTSIDE_DELIVERY_AREA'
+  | 'RIDER_UNAVAILABLE'
   | 'COUPON_INVALID'
   | 'EMPTY_CART';
 

@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { OrderType, VehicleType } from '@prisma/client';
 
 export class CartAddOnDto {
   @ApiProperty() id!: string;
@@ -93,12 +94,60 @@ export class CartDeliveryDto {
   isDeliverable!: boolean;
 }
 
+export class CartRiderDto {
+  @ApiProperty() id!: string;
+  @ApiProperty({ example: 'Bilal Ahmed' }) fullName!: string;
+  @ApiPropertyOptional({ nullable: true }) avatarUrl!: string | null;
+  @ApiProperty({ example: 4.8 }) rating!: number;
+  @ApiPropertyOptional({ enum: VehicleType, nullable: true }) vehicleType!: VehicleType | null;
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 60,
+    description: 'The rider’s own rate per kilometre. Null charges the platform rate.',
+  })
+  perKmRate!: number | null;
+}
+
+/** One rider on the checkout's "choose your rider" list. */
+export class CartRiderOptionDto extends CartRiderDto {
+  @ApiProperty({ example: 132 }) ratingCount!: number;
+  @ApiProperty({ example: 486 }) totalDeliveries!: number;
+
+  @ApiProperty({ example: 1.2, description: 'How far the rider is from the business.' })
+  distanceToPickupKm!: number;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 120,
+    description:
+      'What delivery would cost with this rider, to the cart’s address. Null until ' +
+      'an address is chosen, or when this rider cannot reach it.',
+  })
+  deliveryFee!: number | null;
+
+  @ApiProperty({ description: 'Whether this is the rider currently chosen.' })
+  isSelected!: boolean;
+}
+
 export class CartDto {
   @ApiProperty() id!: string;
   @ApiProperty({ type: CartRestaurantDto }) restaurant!: CartRestaurantDto;
   @ApiProperty({ type: [CartLineDto] }) items!: CartLineDto[];
   @ApiProperty({ type: CartTotalsDto }) totals!: CartTotalsDto;
   @ApiProperty({ type: CartDeliveryDto }) delivery!: CartDeliveryDto;
+
+  @ApiProperty({
+    enum: OrderType,
+    description: 'DELIVERY to the chosen address, or PICKUP: the customer collects it.',
+  })
+  fulfilment!: OrderType;
+
+  @ApiPropertyOptional({
+    type: CartRiderDto,
+    nullable: true,
+    description: 'The rider the customer chose. Null lets dispatch pick one.',
+  })
+  rider!: CartRiderDto | null;
 
   @ApiPropertyOptional({ nullable: true, example: 'ZASS100' }) couponCode!: string | null;
   @ApiPropertyOptional({ nullable: true }) notes!: string | null;

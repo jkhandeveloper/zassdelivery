@@ -43,6 +43,7 @@ import {
   RegisterRiderDto,
   RejectOfferDto,
   SetAvailabilityDto,
+  SetDeliveryRateDto,
   UpdateLocationDto,
   UpdateRiderDto,
   UploadDocumentDto,
@@ -62,7 +63,6 @@ import {
   EarningsSummaryUseCase,
   ListEarningsUseCase,
 } from './application/use-cases/earnings.use-cases';
-import { RiderSettingsService } from './application/services/rider-settings.service';
 import { RiderSettlementUseCases } from './application/use-cases/settlement.use-cases';
 import { ResubmitApplicationUseCase } from './application/use-cases/rider-approval.use-cases';
 import {
@@ -70,6 +70,8 @@ import {
   ListMyDocumentsUseCase,
   RegisterRiderUseCase,
   SetAvailabilityUseCase,
+  GetMyDeliveryRatesUseCase,
+  SetRiderDeliveryRateUseCase,
   SetRiderPaymentQrCodesUseCase,
   UpdateLocationUseCase,
   UpdateRiderProfileUseCase,
@@ -98,6 +100,8 @@ export class RidersController {
     private readonly getProfile: GetMyRiderProfileUseCase,
     private readonly updateProfile: UpdateRiderProfileUseCase,
     private readonly setPaymentQrCodes: SetRiderPaymentQrCodesUseCase,
+    private readonly myDeliveryRates: GetMyDeliveryRatesUseCase,
+    private readonly setDeliveryRate: SetRiderDeliveryRateUseCase,
     private readonly resubmit: ResubmitApplicationUseCase,
     private readonly listDocuments: ListMyDocumentsUseCase,
     private readonly uploadDocument: UploadDocumentUseCase,
@@ -113,7 +117,6 @@ export class RidersController {
     private readonly listEarnings: ListEarningsUseCase,
     private readonly earningsSummary: EarningsSummaryUseCase,
     private readonly settlement: RiderSettlementUseCases,
-    private readonly riderSettings: RiderSettingsService,
   ) {}
 
   // ── Registration and profile ───────────────────────────────
@@ -166,12 +169,29 @@ export class RidersController {
     summary: 'What a delivery pays',
     description:
       'The per-kilometre rate, the minimum and maximum fee and the furthest ' +
-      'distance delivered. The fee on each order is priced from these, and you ' +
-      'keep it in full.',
+      'distance delivered, the bounds on a rate of your own, and your own rate. ' +
+      'The fee on each order is priced from these, and you keep it in full.',
   })
   @ApiResponse({ status: 200, type: DeliveryRatesDto })
-  deliveryRates(): Promise<DeliveryRatesDto> {
-    return this.riderSettings.deliveryRates();
+  deliveryRates(@CurrentUser() actor: AuthenticatedUser): Promise<DeliveryRatesDto> {
+    return this.myDeliveryRates.execute(actor);
+  }
+
+  @Put('me/delivery-rate')
+  @ApiOperation({
+    summary: 'Set my per-kilometre rate',
+    description:
+      'What you charge per kilometre. Customers see it next to your name when ' +
+      'they choose a rider, and pick freely between cheaper and dearer riders. ' +
+      'Null goes back to the platform rate. Applies to orders placed from now on.',
+  })
+  @ApiResponse({ status: 200, type: RiderDto })
+  @ApiResponse({ status: 422, description: 'Outside the platform’s bounds.' })
+  deliveryRate(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Body() dto: SetDeliveryRateDto,
+  ): Promise<RiderDto> {
+    return this.setDeliveryRate.execute(actor, dto);
   }
 
   @Put('me/payment-qr-codes')

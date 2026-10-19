@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { CartItem, Prisma } from '@prisma/client';
+import type { CartItem, OrderType, Prisma } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/prisma/prisma.service';
 
@@ -170,6 +170,17 @@ export class PrismaCartRepository extends CartRepository {
 
   async setTip(cartId: string, tipAmount: number): Promise<void> {
     await this.prisma.cart.update({ where: { id: cartId }, data: { tipAmount } });
+  }
+
+  async setFulfilment(cartId: string, fulfilment: OrderType): Promise<void> {
+    await this.prisma.cart.update({ where: { id: cartId }, data: { fulfilment } });
+  }
+
+  async setPreferredDriver(cartId: string, driverId: string | null): Promise<void> {
+    await this.prisma.cart.update({
+      where: { id: cartId },
+      data: { preferredDriverId: driverId },
+    });
   }
 
   async touchExpiry(cartId: string, ttlHours: number): Promise<void> {

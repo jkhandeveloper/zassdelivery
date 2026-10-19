@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { AssignmentStatus, DriverAvailability, OrderStatus, Prisma } from '@prisma/client';
+import {
+  AssignmentStatus,
+  DriverAvailability,
+  OrderStatus,
+  OrderType,
+  Prisma,
+} from '@prisma/client';
 
 import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
 import type { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
@@ -303,6 +309,8 @@ export class PrismaAssignmentRepository extends AssignmentRepository {
     const orders = await this.prisma.order.findMany({
       where: {
         status: { in: statuses },
+        // A customer collecting their own order needs no rider.
+        type: OrderType.DELIVERY,
         // No rider on the order and no live assignment are two different
         // conditions, and both matter: `driverId` is only set once an offer is
         // *accepted*, so an order with an offer still open would otherwise be

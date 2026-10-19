@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { OrderType } from '@prisma/client';
 
 import {
   CartValidationService,
@@ -7,8 +8,10 @@ import {
 import { PricingService, money, type PricedLine } from '../../domain/services/pricing.service';
 import {
   DeliveryPricingRepository,
+  type AvailableRider,
   type CartWithContents,
 } from '../../domain/repositories/cart.repository';
+import { RIDER_SEARCH_SETTINGS } from '../../domain/services/delivery-fee.policy';
 import type { CartDto, CartLineDto } from '../dto/cart-response.dto';
 
 /** Platform-wide tax setting, read from the Setting table. */
@@ -35,8 +38,25 @@ export class CartAssemblerService {
     const issues = this.validation.validate(cart);
     const lines = this.priceLines(cart);
 
+    // Collected over the counter: no address, no rider, nothing to deliver.
+    const pickup = cart.fulfilment === OrderType.PICKUP;
+
+    const rider =
+      !pickup && cart.preferredDriverId !== null
+        ? ((await this.availableRiders(cart, cart.preferredDriverId))[0] ?? null)
+        : null;
+
+    if (!pickup && cart.preferredDriverId !== null && rider === null) {
+      issues.push({
+        code: 'RIDER_UNAVAILABLE',
+        message:
+          'The rider you chose is no longer available. Choose another rider, or let us find one.',
+        blocking: true,
+      });
+    }
+
     const quote =
-      cart.address !== null
+      !pickup && cart.address !== null
         ? await this.delivery.quote(
             cart.restaurant.latitude,
             cart.restaurant.longitude,
@@ -44,10 +64,11 @@ export class CartAssemblerService {
             cart.address.latitude,
             cart.address.longitude,
             cart.address.zoneId ?? cart.restaurant.zoneId,
+            rider?.perKmRate ?? null,
           )
         : null;
 
-    if (cart.address !== null && quote === null) {
+    if (!pickup && cart.address !== null && quote === null) {
       issues.push({
         code: 'OUTSIDE_DELIVERY_AREA',
         message: 'This business does not deliver to the selected address.',
@@ -55,7 +76,7 @@ export class CartAssemblerService {
       });
     }
 
-    if (cart.address === null) {
+    if (!pickup && cart.address === null) {
       issues.push({
         code: 'NO_ADDRESS',
         message: 'Choose a delivery address to see the final total.',
@@ -84,7 +105,8 @@ export class CartAssemblerService {
       baseDeliveryFee: quote?.fee ?? 0,
       freeDeliveryThreshold: quote?.freeDeliveryThreshold ?? null,
       taxPercentage,
-      tipAmount: Number(cart.tipAmount),
+      // The tip is the rider's, and a pickup order has no rider.
+      tipAmount: pickup ? 0 : Number(cart.tipAmount),
     });
 
     const minimumOrder = Number(cart.restaurant.minOrderAmount);
@@ -125,13 +147,28 @@ export class CartAssemblerService {
       },
       items: this.presentLines(cart, lines, issues),
       totals,
+      fulfilment: cart.fulfilment,
+      rider:
+        rider === null
+          ? null
+          : {
+              id: rider.driverId,
+              fullName: rider.fullName,
+              avatarUrl: rider.avatarUrl,
+              rating: rider.rating,
+              vehicleType: rider.vehicleType,
+              perKmRate: rider.perKmRate,
+            },
       delivery: {
         addressId: cart.addressId,
         addressLine: cart.address?.line1 ?? null,
         distanceKm: quote?.distanceKm ?? null,
-        etaMinutes:
-          quote === null ? null : quote.etaMinutes + cart.restaurant.avgPreparationMinutes,
-        isDeliverable: cart.address === null ? true : quote !== null,
+        etaMinutes: pickup
+          ? cart.restaurant.avgPreparationMinutes
+          : quote === null
+            ? null
+            : quote.etaMinutes + cart.restaurant.avgPreparationMinutes,
+        isDeliverable: pickup || cart.address === null ? true : quote !== null,
       },
       couponCode: cart.couponCode,
       notes: cart.notes,
@@ -139,6 +176,31 @@ export class CartAssemblerService {
       canCheckout: CartValidationService.blockingOnly(issues).length === 0,
       expiresAt: cart.expiresAt,
     };
+  }
+
+  /**
+   * Riders free to take this cart's order, nearest the business first — or,
+   * given an id, whether that one rider still is.
+   */
+  async availableRiders(cart: CartWithContents, driverId?: string): Promise<AvailableRider[]> {
+    const [radiusKm, freshnessMinutes] = await Promise.all([
+      this.delivery.numericSetting(
+        RIDER_SEARCH_SETTINGS.searchRadiusKm.key,
+        RIDER_SEARCH_SETTINGS.searchRadiusKm.fallback,
+      ),
+      this.delivery.numericSetting(
+        RIDER_SEARCH_SETTINGS.locationFreshnessMinutes.key,
+        RIDER_SEARCH_SETTINGS.locationFreshnessMinutes.fallback,
+      ),
+    ]);
+
+    return this.delivery.findAvailableRiders({
+      pickupLat: cart.restaurant.latitude,
+      pickupLng: cart.restaurant.longitude,
+      radiusKm,
+      freshSince: new Date(Date.now() - freshnessMinutes * 60_000),
+      driverId,
+    });
   }
 
   /**

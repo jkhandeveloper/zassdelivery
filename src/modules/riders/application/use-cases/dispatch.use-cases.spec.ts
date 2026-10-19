@@ -3,6 +3,7 @@ import {
   DriverAvailability,
   DriverStatus,
   OrderStatus,
+  OrderType,
   UserRole,
 } from '@prisma/client';
 
@@ -142,6 +143,49 @@ function build(options: {
     ),
   };
 }
+
+describe('AssignOrderUseCase — the customer’s chosen rider', () => {
+  const nearAndChosen = [
+    candidate({ driverId: 'near' }),
+    candidate({ driverId: 'chosen', currentLat: 34.05, currentLng: 71.83 }),
+  ];
+
+  it('offers the order to the chosen rider ahead of a nearer one', async () => {
+    const { useCase, assignments } = build({
+      loadedOrder: order({ preferredDriverId: 'chosen' }),
+      candidates: nearAndChosen,
+    });
+
+    await useCase.execute('order-1', {}, null);
+
+    expect(assignments.offer).toHaveBeenCalledWith(
+      expect.objectContaining({ driverId: 'chosen', isAuto: true }),
+    );
+  });
+
+  it('moves on to the best rider once the chosen one let the offer lapse', async () => {
+    const { useCase, assignments } = build({
+      loadedOrder: order({ preferredDriverId: 'chosen' }),
+      candidates: [
+        candidate({ driverId: 'near' }),
+        candidate({ driverId: 'chosen', ignoredOffersForThisOrder: 1 }),
+      ],
+    });
+
+    await useCase.execute('order-1', {}, null);
+
+    expect(assignments.offer).toHaveBeenCalledWith(expect.objectContaining({ driverId: 'near' }));
+  });
+
+  it('never dispatches an order the customer is collecting', async () => {
+    const { useCase, assignments } = build({
+      loadedOrder: order({ type: OrderType.PICKUP }),
+    });
+
+    await expect(useCase.execute('order-1', {}, null)).rejects.toThrow(/collecting this order/);
+    expect(assignments.offer).not.toHaveBeenCalled();
+  });
+});
 
 describe('AssignOrderUseCase — automatic dispatch', () => {
   it('offers the order to the best available rider', async () => {

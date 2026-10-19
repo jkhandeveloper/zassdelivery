@@ -1,15 +1,21 @@
 import { Injectable } from '@nestjs/common';
-import type { Coupon } from '@prisma/client';
+import { AssignmentStatus, DriverAvailability, DriverStatus, type Coupon } from '@prisma/client';
 
-import { haversineMetres } from '@/common/utils/geo.util';
+import { haversineKm, haversineMetres } from '@/common/utils/geo.util';
 import { PrismaService } from '@/infrastructure/prisma/prisma.service';
 
 import {
   CartCouponRepository,
   DeliveryPricingRepository,
+  type AvailableRider,
+  type AvailableRiderSearch,
   type DeliveryQuote,
 } from '../../domain/repositories/cart.repository';
-import { DELIVERY_FEE_SETTINGS, distanceFee } from '../../domain/services/delivery-fee.policy';
+import {
+  DELIVERY_FEE_SETTINGS,
+  distanceFee,
+  riderFee,
+} from '../../domain/services/delivery-fee.policy';
 
 @Injectable()
 export class PrismaDeliveryPricingRepository extends DeliveryPricingRepository {
@@ -24,6 +30,7 @@ export class PrismaDeliveryPricingRepository extends DeliveryPricingRepository {
     addressLat: number,
     addressLng: number,
     zoneId: string,
+    riderRate: number | null = null,
   ): Promise<DeliveryQuote | null> {
     const distanceMeters = haversineMetres(restaurantLat, restaurantLng, addressLat, addressLng);
 
@@ -50,7 +57,10 @@ export class PrismaDeliveryPricingRepository extends DeliveryPricingRepository {
 
     // Priced by the kilometre, and null past the platform's own limit — which
     // applies on top of the restaurant's radius, whichever is the shorter.
-    const fee = distanceFee(distanceKm, { perKmFee, minFee, maxFee, maxDistanceKm });
+    const fee =
+      riderRate === null
+        ? distanceFee(distanceKm, { perKmFee, minFee, maxFee, maxDistanceKm })
+        : riderFee(distanceKm, riderRate, { minFee, maxDistanceKm });
 
     if (fee === null) {
       return null;
@@ -88,6 +98,62 @@ export class PrismaDeliveryPricingRepository extends DeliveryPricingRepository {
       etaMinutes: zone.etaMinutes,
       zoneId,
     };
+  }
+
+  async findAvailableRiders(search: AvailableRiderSearch): Promise<AvailableRider[]> {
+    // The same pool dispatch draws from, so a rider shown here is one who could
+    // actually be offered the run.
+    const riders = await this.prisma.driver.findMany({
+      where: {
+        ...(search.driverId !== undefined && { id: search.driverId }),
+        deletedAt: null,
+        status: DriverStatus.ACTIVE,
+        availability: DriverAvailability.ONLINE,
+        lastLocationAt: { gte: search.freshSince },
+        currentLat: { not: null },
+        currentLng: { not: null },
+        assignments: {
+          none: { status: { in: [AssignmentStatus.OFFERED, AssignmentStatus.ACCEPTED] } },
+        },
+      },
+      select: {
+        id: true,
+        currentLat: true,
+        currentLng: true,
+        rating: true,
+        ratingCount: true,
+        totalDeliveries: true,
+        perKmRate: true,
+        user: { select: { fullName: true, avatarUrl: true } },
+        vehicles: {
+          where: { isActive: true },
+          orderBy: { isPrimary: 'desc' },
+          take: 1,
+          select: { type: true },
+        },
+      },
+      take: 100,
+    });
+
+    return riders
+      .map((rider) => ({
+        driverId: rider.id,
+        fullName: rider.user.fullName,
+        avatarUrl: rider.user.avatarUrl,
+        rating: Number(rider.rating),
+        ratingCount: rider.ratingCount,
+        totalDeliveries: rider.totalDeliveries,
+        vehicleType: rider.vehicles[0]?.type ?? null,
+        perKmRate: rider.perKmRate === null ? null : Number(rider.perKmRate),
+        distanceToPickupKm: haversineKm(
+          rider.currentLat as number,
+          rider.currentLng as number,
+          search.pickupLat,
+          search.pickupLng,
+        ),
+      }))
+      .filter((rider) => rider.distanceToPickupKm <= search.radiusKm)
+      .sort((a, b) => a.distanceToPickupKm - b.distanceToPickupKm);
   }
 
   async numericSetting(key: string, fallback: number): Promise<number> {

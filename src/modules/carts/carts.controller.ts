@@ -15,11 +15,13 @@ import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { ApiErrorResponseDto } from '@/common/dto/api-response.dto';
 
 import { MessageResponseDto } from '../auth/application/dto/auth-response.dto';
-import { CartDto, EmptyCartDto } from './application/dto/cart-response.dto';
+import { CartDto, CartRiderOptionDto, EmptyCartDto } from './application/dto/cart-response.dto';
 import {
   AddCartItemDto,
   ApplyCouponDto,
   SetCartAddressDto,
+  SetCartRiderDto,
+  SetFulfilmentDto,
   SetTipDto,
   UpdateCartItemDto,
 } from './application/dto/cart.dto';
@@ -28,9 +30,12 @@ import {
   ApplyCouponUseCase,
   ClearCartUseCase,
   GetCartUseCase,
+  ListCartRidersUseCase,
   RemoveCartItemUseCase,
   RemoveCouponUseCase,
   SetCartAddressUseCase,
+  SetCartRiderUseCase,
+  SetFulfilmentUseCase,
   SetTipUseCase,
   UpdateCartItemUseCase,
   ValidateCartUseCase,
@@ -60,6 +65,9 @@ export class CartsController {
     private readonly setAddress: SetCartAddressUseCase,
     private readonly setTip: SetTipUseCase,
     private readonly validateCart: ValidateCartUseCase,
+    private readonly setFulfilment: SetFulfilmentUseCase,
+    private readonly listRiders: ListCartRidersUseCase,
+    private readonly setRider: SetCartRiderUseCase,
   ) {}
 
   @Get()
@@ -164,6 +172,44 @@ export class CartsController {
   @ApiResponse({ status: 404, description: 'No such address of yours.' })
   address(@CurrentUser('id') userId: string, @Body() dto: SetCartAddressDto): Promise<CartDto> {
     return this.setAddress.execute(userId, dto);
+  }
+
+  @Patch('fulfilment')
+  @ApiOperation({
+    summary: 'Delivery or self-pickup',
+    description:
+      'PICKUP: you collect the order from the business yourself — no address, ' +
+      'no delivery fee, no rider and no tip. DELIVERY brings it to your address.',
+  })
+  @ApiResponse({ status: 200, type: CartDto })
+  fulfilment(@CurrentUser('id') userId: string, @Body() dto: SetFulfilmentDto): Promise<CartDto> {
+    return this.setFulfilment.execute(userId, dto);
+  }
+
+  @Get('riders')
+  @ApiOperation({
+    summary: 'Riders I can choose',
+    description:
+      'Every rider free to deliver this order right now, with their own ' +
+      'per-kilometre rate and what delivery to your address would cost with ' +
+      'them. Cheap and dear riders alike — choose any. Empty for a pickup order.',
+  })
+  @ApiResponse({ status: 200, type: [CartRiderOptionDto] })
+  riders(@CurrentUser('id') userId: string): Promise<CartRiderOptionDto[]> {
+    return this.listRiders.execute(userId);
+  }
+
+  @Patch('rider')
+  @ApiOperation({
+    summary: 'Choose my rider',
+    description:
+      'The rider is offered the order first and the delivery fee is priced at ' +
+      'their rate. Null lets dispatch find the nearest rider at the platform rate.',
+  })
+  @ApiResponse({ status: 200, type: CartDto })
+  @ApiResponse({ status: 422, description: 'That rider is no longer available.' })
+  rider(@CurrentUser('id') userId: string, @Body() dto: SetCartRiderDto): Promise<CartDto> {
+    return this.setRider.execute(userId, dto);
   }
 
   @Patch('tip')

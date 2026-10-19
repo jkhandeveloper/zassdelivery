@@ -72,7 +72,7 @@ class FakeSms extends SmsSender {
 
 const logger = { error: jest.fn(), warn: jest.fn(), log: jest.fn() } as unknown as LoggerService;
 
-function build() {
+function build(devOtpCode: string | null = null) {
   const { redis, store } = fakeRedis();
   const sms = new FakeSms();
   const service = new PhoneOtpService(
@@ -80,6 +80,7 @@ function build() {
     sms,
     { accessSecret: 'test-secret' } as ConfigType<typeof jwtConfig>,
     logger,
+    { devOtpCode },
   );
 
   return { service, sms, store };
@@ -167,5 +168,16 @@ describe('PhoneOtpService', () => {
 
     expect(service.settings().enabled).toBe(false);
     await expect(service.send(PHONE, 'register')).rejects.toThrow(/not available/);
+  });
+
+  it('texts the developer code and accepts it even unsent, when one is set', async () => {
+    const { service, sms } = build('123456');
+
+    await service.send(PHONE, 'register');
+    expect(sms.lastCode()).toBe('123456');
+
+    await expect(service.verify(PHONE, 'register', '123456')).resolves.toBeUndefined();
+    await expect(service.verify(PHONE, 'login', '123456')).resolves.toBeUndefined();
+    await expect(service.verify(PHONE, 'login', '654321')).rejects.toThrow(/expired/);
   });
 });

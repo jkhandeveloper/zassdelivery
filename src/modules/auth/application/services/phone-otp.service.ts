@@ -4,7 +4,7 @@ import { Inject, Injectable, type LoggerService } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
-import { jwtConfig } from '@/config';
+import { appConfig, jwtConfig } from '@/config';
 import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
 import { RedisService } from '@/infrastructure/redis/redis.service';
 
@@ -65,6 +65,8 @@ export class PhoneOtpService {
     private readonly jwt: ConfigType<typeof jwtConfig>,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
+    @Inject(appConfig.KEY)
+    private readonly app: Pick<ConfigType<typeof appConfig>, 'devOtpCode'>,
   ) {}
 
   get enabled(): boolean {
@@ -103,7 +105,9 @@ export class PhoneOtpService {
       );
     }
 
-    const code = String(randomInt(0, 10 ** OTP_CODE_LENGTH)).padStart(OTP_CODE_LENGTH, '0');
+    const code =
+      this.app.devOtpCode ??
+      String(randomInt(0, 10 ** OTP_CODE_LENGTH)).padStart(OTP_CODE_LENGTH, '0');
     const codeKey = this.key('code', purpose, phone);
 
     await this.redis.setJson<StoredCode>(
@@ -140,6 +144,12 @@ export class PhoneOtpService {
   /** Spends a code. Throws, saying why, unless it is the right one and still live. */
   async verify(phone: string, purpose: OtpPurpose, code: string): Promise<void> {
     const codeKey = this.key('code', purpose, phone);
+
+    // Developer testing: the fixed code works whether or not one was sent.
+    if (this.app.devOtpCode !== null && code.trim() === this.app.devOtpCode) {
+      await this.redis.delete(codeKey);
+      return;
+    }
     const stored = await this.redis.getJson<StoredCode>(codeKey);
 
     if (stored === null) {

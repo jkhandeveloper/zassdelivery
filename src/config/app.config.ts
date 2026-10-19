@@ -29,6 +29,12 @@ export const appConfig = registerAs(APP_CONFIG_KEY, () => {
     countryCode: process.env.DEFAULT_COUNTRY_CODE ?? '+92',
     timezone: process.env.DEFAULT_TIMEZONE ?? 'Asia/Karachi',
     currency: process.env.DEFAULT_CURRENCY ?? 'PKR',
+    /**
+     * Developer testing only: a fixed six-digit code that every phone
+     * verification accepts, and whose first four digits become every delivery
+     * code. Always null in production.
+     */
+    devOtpCode: nodeEnv === NodeEnv.Production ? null : process.env.DEV_OTP_CODE?.trim() || null,
     /** Requests are aborted after this many milliseconds by the timeout interceptor. */
     requestTimeoutMs: 15000,
     /** Grace period given to in-flight requests during shutdown. */

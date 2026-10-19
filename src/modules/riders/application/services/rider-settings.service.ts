@@ -3,6 +3,8 @@ import { Injectable } from '@nestjs/common';
 import { DeliveryPricingRepository } from '@/modules/carts/domain/repositories/cart.repository';
 import {
   DELIVERY_FEE_SETTINGS,
+  RIDER_RATE_SETTINGS,
+  RIDER_SEARCH_SETTINGS,
   type DeliveryFeeRules,
 } from '@/modules/carts/domain/services/delivery-fee.policy';
 
@@ -18,8 +20,7 @@ import {
  */
 export const RIDER_SETTINGS = {
   offerTimeoutSeconds: { key: 'dispatch.offer_timeout_seconds', fallback: 60 },
-  searchRadiusKm: { key: 'dispatch.search_radius_km', fallback: 8 },
-  locationFreshnessMinutes: { key: 'dispatch.location_freshness_minutes', fallback: 10 },
+  ...RIDER_SEARCH_SETTINGS,
 } as const;
 
 export interface DispatchSettings {
@@ -57,6 +58,16 @@ export class RiderSettingsService {
     ]);
 
     return { perKmFee, minFee, maxFee, maxDistanceKm };
+  }
+
+  /** The lowest and highest per-kilometre rate a rider may set. */
+  async riderRateBounds(): Promise<{ min: number; max: number }> {
+    const [min, max] = await Promise.all([
+      this.read(RIDER_RATE_SETTINGS.min),
+      this.read(RIDER_RATE_SETTINGS.max),
+    ]);
+
+    return { min, max };
   }
 
   private read(setting: { key: string; fallback: number }): Promise<number> {

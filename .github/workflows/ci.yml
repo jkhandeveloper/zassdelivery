@@ -117,6 +117,12 @@ jobs:
         # would hang a CI runner.
         run: npx prisma migrate deploy
 
+      # Fails the run when schema.prisma has changes no migration carries.
+      # Production applies migrations on container boot (docker-entrypoint.sh),
+      # so a missing one would otherwise only show up as a broken deploy.
+      - name: Check migrations match the schema
+        run: scripts/check-migrations.sh
+
       - name: Seed reference data
         run: npx prisma db seed
 

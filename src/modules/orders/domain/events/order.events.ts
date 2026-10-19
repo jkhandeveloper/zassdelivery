@@ -1,4 +1,4 @@
-import type { ActorType, OrderStatus } from '@prisma/client';
+import type { ActorType, OrderStatus, OrderType } from '@prisma/client';
 
 /**
  * What the orders module announces, as data.
@@ -29,6 +29,8 @@ export interface OrderStatusEventPayload {
   previousStatus: OrderStatus | null;
   /** Who moved it. Null when the order was just placed. */
   actor: ActorType | null;
+  /** Delivered, or collected by the customer. Absent is read as delivery. */
+  orderType?: OrderType;
   customerId: string;
   restaurantId: string;
   restaurantName: string;

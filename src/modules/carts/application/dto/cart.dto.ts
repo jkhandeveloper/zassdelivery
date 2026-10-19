@@ -1,8 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { OrderType } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
@@ -10,6 +12,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -106,4 +109,23 @@ export class SetTipDto {
   @Min(0)
   @Max(10000)
   tipAmount!: number;
+}
+
+export class SetFulfilmentDto {
+  @ApiProperty({
+    enum: OrderType,
+    description: 'DELIVERY to your address, or PICKUP to collect it from the business yourself.',
+  })
+  @IsEnum(OrderType)
+  fulfilment!: OrderType;
+}
+
+export class SetCartRiderDto {
+  @ApiProperty({
+    nullable: true,
+    description: 'A rider from GET /cart/riders. Null lets dispatch pick one.',
+  })
+  @ValidateIf((dto: SetCartRiderDto) => dto.driverId !== null)
+  @IsString()
+  driverId!: string | null;
 }

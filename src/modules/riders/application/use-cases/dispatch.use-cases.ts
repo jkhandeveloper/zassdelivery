@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AssignmentStatus, DriverStatus, OrderStatus } from '@prisma/client';
+import { AssignmentStatus, DriverStatus, OrderStatus, OrderType } from '@prisma/client';
 
 import {
   BusinessRuleViolationException,
@@ -87,6 +87,12 @@ export class AssignOrderUseCase {
       );
     }
 
+    if (order.type === OrderType.PICKUP) {
+      throw new BusinessRuleViolationException(
+        'The customer is collecting this order themselves, so it needs no rider.',
+      );
+    }
+
     if (order.driverId !== null) {
       throw new BusinessRuleViolationException(
         'This order already has a rider. Cancel that assignment before reassigning it.',
@@ -100,7 +106,14 @@ export class AssignOrderUseCase {
 
     const chosen =
       dto.driverId === undefined
-        ? await this.autoSelect(order.id, order.zoneId, pickupLat, pickupLng, dispatchSettings)
+        ? await this.autoSelect(
+            order.id,
+            order.zoneId,
+            order.preferredDriverId,
+            pickupLat,
+            pickupLng,
+            dispatchSettings,
+          )
         : await this.named(dto.driverId, pickupLat, pickupLng, dispatchSettings);
 
     const timeoutSeconds = dto.timeoutSeconds ?? dispatchSettings.offerTimeoutSeconds;
@@ -153,17 +166,31 @@ export class AssignOrderUseCase {
   private async autoSelect(
     orderId: string,
     zoneId: string,
+    preferredDriverId: string | null,
     pickupLat: number,
     pickupLng: number,
     dispatchSettings: { searchRadiusKm: number; locationFreshnessMinutes: number },
   ): Promise<{ driverId: string; pickupDistanceKm: number | null }> {
     const candidates = await this.riders.findDispatchCandidates(orderId);
 
-    const best = this.dispatch.pick(candidates, pickupLat, pickupLng, {
+    const ranked = this.dispatch.rank(candidates, pickupLat, pickupLng, {
       searchRadiusKm: dispatchSettings.searchRadiusKm,
       locationFreshnessMinutes: dispatchSettings.locationFreshnessMinutes,
       orderZoneId: zoneId,
     });
+
+    // The rider the customer chose is offered the run first, whoever ranks
+    // higher. Once they turn it down or let it lapse — or have gone busy or
+    // offline since checkout — it goes to the next best rider like any other
+    // order, at the fee the customer already agreed to, rather than leaving
+    // the food waiting for one person.
+    const best =
+      ranked.find(
+        (candidate) =>
+          candidate.driverId === preferredDriverId && candidate.ignoredOffersForThisOrder === 0,
+      ) ??
+      ranked[0] ??
+      null;
 
     if (!best) {
       throw new BusinessRuleViolationException(

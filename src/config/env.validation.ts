@@ -256,6 +256,12 @@ export class EnvironmentVariables {
   @IsString()
   TEXTBEE_DEVICE_ID?: string;
 
+  // A fixed code every OTP check accepts, for developer testing. Refused in
+  // production by `validateEnvironment`.
+  @IsOptional()
+  @Matches(/^(\d{6})?$/, { message: 'DEV_OTP_CODE must be six digits, e.g. "123456"' })
+  DEV_OTP_CODE?: string;
+
   // ── Object storage (MinIO / S3) ──
   // Credentials are absent on a machine without MinIO running, so the pair is
   // optional: uploads report the store as unconfigured rather than crashing the
@@ -328,6 +334,14 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     whitelist: false,
     forbidUnknownValues: false,
   });
+
+  // A code anyone can type would let anyone sign in as anyone and close any
+  // delivery, so a production process will not start with one set.
+  if (validated.NODE_ENV === NodeEnv.Production && validated.DEV_OTP_CODE) {
+    throw new Error(
+      'Invalid environment configuration:\n  • DEV_OTP_CODE: must not be set in production',
+    );
+  }
 
   if (errors.length > 0) {
     const details = errors

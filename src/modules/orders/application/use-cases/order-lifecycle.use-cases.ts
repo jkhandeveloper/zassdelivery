@@ -67,9 +67,10 @@ function statusEvent(
     orderId: order.id,
     orderNumber: order.orderNumber,
     status: order.status,
-    statusText: OrderStateMachine.describe(order.status),
+    statusText: OrderStateMachine.describe(order.status, order.type),
     previousStatus,
     actor,
+    orderType: order.type,
     customerId: order.customerId,
     restaurantId: order.restaurantId,
     restaurantName: order.restaurant.name,
@@ -335,7 +336,7 @@ export class AdvanceOrderUseCase {
       orderId: order.id,
       orderNumber: order.orderNumber,
       status: order.status,
-      statusText: OrderStateMachine.describe(order.status),
+      statusText: OrderStateMachine.describe(order.status, order.type),
       actor,
       at: new Date().toISOString(),
     });
@@ -397,7 +398,7 @@ export class CancelOrderUseCase {
       orderId: updated.id,
       orderNumber: updated.orderNumber,
       status: updated.status,
-      statusText: OrderStateMachine.describe(updated.status),
+      statusText: OrderStateMachine.describe(updated.status, updated.type),
       actor: as,
       at: new Date().toISOString(),
     });
@@ -519,7 +520,7 @@ export class OrderTimelineUseCase {
         fromStatus: entry.fromStatus,
         toStatus: entry.toStatus,
         actor: entry.actor,
-        label: OrderStateMachine.describe(entry.toStatus),
+        label: OrderStateMachine.describe(entry.toStatus, order.type),
         note: entry.note,
         at: entry.createdAt,
       }));

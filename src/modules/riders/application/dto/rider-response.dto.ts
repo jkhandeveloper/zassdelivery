@@ -98,6 +98,13 @@ export class RiderDto {
   @ApiProperty({ example: 132 }) ratingCount!: number;
   @ApiProperty({ example: 486 }) totalDeliveries!: number;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 60,
+    description: 'What this rider charges per kilometre. Null charges the platform rate.',
+  })
+  perKmRate!: number | null;
+
   @ApiProperty({ type: [RiderVehicleResponseDto] }) vehicles!: RiderVehicleResponseDto[];
   @ApiProperty({ type: [RiderDocumentDto] }) documents!: RiderDocumentDto[];
 
@@ -412,6 +419,7 @@ export function toRiderDto(rider: RiderWithDetails, options: RiderDtoOptions = {
     rating: Number(rider.rating),
     ratingCount: rider.ratingCount,
     totalDeliveries: rider.totalDeliveries,
+    perKmRate: rider.perKmRate === null ? null : Number(rider.perKmRate),
     vehicles: rider.vehicles.map((vehicle) => ({
       id: vehicle.id,
       type: vehicle.type,
@@ -608,4 +616,19 @@ export class DeliveryRatesDto {
 
   @ApiProperty({ example: 3, description: 'Orders further than this are not delivered.' })
   maxDistanceKm!: number;
+
+  @ApiProperty({ example: 10, description: 'The lowest per-kilometre rate you may set.' })
+  riderRateMin!: number;
+
+  @ApiProperty({ example: 500, description: 'The highest per-kilometre rate you may set.' })
+  riderRateMax!: number;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 60,
+    description:
+      'Your own per-kilometre rate. Null charges the platform rate. Your own rate ' +
+      'is not capped at maxFee — customers see it when they choose a rider.',
+  })
+  myPerKmRate!: number | null;
 }

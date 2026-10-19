@@ -1,6 +1,6 @@
 import { Inject, Injectable, type LoggerService } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { NotificationChannel, NotificationType, OrderStatus } from '@prisma/client';
+import { NotificationChannel, NotificationType, OrderStatus, OrderType } from '@prisma/client';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 import {
@@ -90,6 +90,17 @@ export class OrderNotificationsListener {
         ];
 
       case OrderStatus.READY_FOR_PICKUP:
+        if (event.orderType === OrderType.PICKUP) {
+          return [
+            {
+              userId: event.customerId,
+              title: `Order ${event.orderNumber} is ready to collect`,
+              body: `Your food is packed and waiting for you at ${event.restaurantName}.`,
+              push: true,
+            },
+          ];
+        }
+
         return [
           {
             userId: event.customerId,
@@ -117,7 +128,9 @@ export class OrderNotificationsListener {
         return [
           {
             userId: event.customerId,
-            title: `Order ${event.orderNumber} delivered`,
+            title: `Order ${event.orderNumber} ${
+              event.orderType === OrderType.PICKUP ? 'collected' : 'delivered'
+            }`,
             body: `Enjoy your food. Tell us how ${event.restaurantName} did — it helps other people order.`,
           },
         ];

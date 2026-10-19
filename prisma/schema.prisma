@@ -1150,6 +1150,10 @@ model Driver {
   /// Customer-facing QR destinations used when a rider receives payment.
   paymentQrCodes      Json?   @map("payment_qr_codes")
 
+  /// What this rider charges per kilometre, set by the rider. Null charges the
+  /// platform's own rate. Customers see it when they choose a rider.
+  perKmRate Decimal? @map("per_km_rate") @db.Decimal(8, 2)
+
   verifiedAt DateTime? @map("verified_at") @db.Timestamptz(3)
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -1376,6 +1380,10 @@ model Order {
 
   type   OrderType   @default(DELIVERY)
   status OrderStatus @default(PENDING_PAYMENT)
+
+  /// The rider the customer chose at checkout, offered the run before anyone
+  /// else. `driverId` is who actually carries it.
+  preferredDriverId String? @map("preferred_driver_id")
 
   // ── Delivery snapshot ──
   // Copied at placement. The customer may later edit or delete the address;
@@ -2205,6 +2213,13 @@ model Cart {
   couponId   String? @map("coupon_id")
   /// Snapshot, so the basket still shows what was applied if the coupon is renamed.
   couponCode String? @map("coupon_code") @db.VarChar(40)
+
+  /// Delivered to the address, or collected from the business by the customer.
+  fulfilment OrderType @default(DELIVERY)
+
+  /// The rider the customer chose at checkout. Null leaves the choice to
+  /// dispatch. Not a relation: a rider who leaves must not delete the basket.
+  preferredDriverId String? @map("preferred_driver_id")
 
   tipAmount Decimal @default(0) @map("tip_amount") @db.Decimal(10, 2)
   notes     String? @db.VarChar(500)

@@ -22,6 +22,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -186,6 +187,22 @@ export class UpdateRiderDto {
   @ValidateNested()
   @Type(() => PayoutDetailsDto)
   payout?: PayoutDetailsDto;
+}
+
+export class SetDeliveryRateDto {
+  @ApiProperty({
+    example: 60,
+    nullable: true,
+    description:
+      'What you charge per kilometre, in PKR, within the platform’s bounds. ' +
+      'Null goes back to the platform’s own rate.',
+  })
+  @ValidateIf((dto: SetDeliveryRateDto) => dto.perKmRate !== null)
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  @Max(100000)
+  perKmRate!: number | null;
 }
 
 // ── Documents ──────────────────────────────────────────────────

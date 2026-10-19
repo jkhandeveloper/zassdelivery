@@ -1,4 +1,4 @@
-import { distanceFee, type DeliveryFeeRules } from './delivery-fee.policy';
+import { distanceFee, riderFee, type DeliveryFeeRules } from './delivery-fee.policy';
 
 const RULES: DeliveryFeeRules = { perKmFee: 50, minFee: 50, maxFee: 150, maxDistanceKm: 3 };
 
@@ -31,5 +31,17 @@ describe('distanceFee', () => {
 
   it('charges whole rupees', () => {
     expect(distanceFee(1.234, RULES)).toBe(62);
+  });
+});
+
+describe('riderFee', () => {
+  it("charges the rider's own rate, above the platform's maximum", () => {
+    expect(riderFee(2, 30, RULES)).toBe(60);
+    expect(riderFee(2.5, 120, RULES)).toBe(300);
+  });
+
+  it("keeps the platform's minimum and distance limit", () => {
+    expect(riderFee(0.5, 20, RULES)).toBe(50);
+    expect(riderFee(3.1, 100, RULES)).toBeNull();
   });
 });

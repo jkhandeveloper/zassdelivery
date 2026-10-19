@@ -27,16 +27,19 @@ import { RiderRepository, type RiderWithDetails } from '../../domain/repositorie
 import {
   toDocumentDto,
   toRiderDto,
+  type DeliveryRatesDto,
   type RiderDocumentDto,
   type RiderDto,
 } from '../dto/rider-response.dto';
 import type {
   RegisterRiderDto,
   SetAvailabilityDto,
+  SetDeliveryRateDto,
   UpdateLocationDto,
   UpdateRiderDto,
   UploadDocumentDto,
 } from '../dto/rider.dto';
+import { RiderSettingsService } from '../services/rider-settings.service';
 
 /** Vehicles with no paperwork of their own. */
 export const UNREGISTERED_VEHICLES: VehicleType[] = [VehicleType.ON_FOOT, VehicleType.BICYCLE];
@@ -220,6 +223,63 @@ export class SetRiderPaymentQrCodesUseCase {
     const updated = await this.riders.update(rider.id, {
       paymentQrCodes: toStoredPaymentQrCodes(dto.codes),
     });
+
+    return toRiderDto(updated, { includePayout: true });
+  }
+}
+
+@Injectable()
+export class GetMyDeliveryRatesUseCase {
+  constructor(
+    private readonly access: RiderAccessService,
+    private readonly settings: RiderSettingsService,
+  ) {}
+
+  /** The platform's rates, the bounds on a rider's own, and the rider's own. */
+  async execute(actor: AuthenticatedUser): Promise<DeliveryRatesDto> {
+    const rider = await this.access.mine(actor);
+    const [rates, bounds] = await Promise.all([
+      this.settings.deliveryRates(),
+      this.settings.riderRateBounds(),
+    ]);
+
+    return {
+      ...rates,
+      riderRateMin: bounds.min,
+      riderRateMax: bounds.max,
+      myPerKmRate: rider.perKmRate === null ? null : Number(rider.perKmRate),
+    };
+  }
+}
+
+@Injectable()
+export class SetRiderDeliveryRateUseCase {
+  constructor(
+    private readonly riders: RiderRepository,
+    private readonly access: RiderAccessService,
+    private readonly settings: RiderSettingsService,
+  ) {}
+
+  /**
+   * Sets what the rider charges per kilometre.
+   *
+   * Applies to orders placed from now on: an order already placed keeps the
+   * fee its customer agreed to.
+   */
+  async execute(actor: AuthenticatedUser, dto: SetDeliveryRateDto): Promise<RiderDto> {
+    const rider = await this.access.mine(actor);
+
+    if (dto.perKmRate !== null) {
+      const { min, max } = await this.settings.riderRateBounds();
+
+      if (dto.perKmRate < min || dto.perKmRate > max) {
+        throw new BusinessRuleViolationException(
+          `Your rate must be between Rs. ${min} and Rs. ${max} per kilometre.`,
+        );
+      }
+    }
+
+    const updated = await this.riders.update(rider.id, { perKmRate: dto.perKmRate });
 
     return toRiderDto(updated, { includePayout: true });
   }

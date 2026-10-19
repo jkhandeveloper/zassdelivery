@@ -29,6 +29,12 @@ describe('DeliveryOtpService.generate', () => {
 
     expect(codes.size).toBeGreaterThan(1);
   });
+
+  it('uses the first four digits of the developer code when one is set', () => {
+    const dev = new DeliveryOtpService({ devOtpCode: '123456' });
+
+    expect(dev.generate()).toBe('1234');
+  });
 });
 
 describe('DeliveryOtpService.hash', () => {

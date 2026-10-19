@@ -73,6 +73,7 @@ function rider(overrides: Partial<RiderWithDetails> = {}): RiderWithDetails {
     payoutAccountTitle: null,
     payoutAccountNumber: null,
     paymentQrCodes: null,
+    perKmRate: null,
     verifiedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),

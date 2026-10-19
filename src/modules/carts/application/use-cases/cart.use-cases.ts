@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { MenuItemStatus } from '@prisma/client';
+import { MenuItemStatus, OrderType } from '@prisma/client';
 
 import {
   BusinessRuleViolationException,
@@ -11,13 +11,16 @@ import { AddressRepository } from '@/modules/users/domain/repositories/address.r
 import {
   CartCouponRepository,
   CartRepository,
+  DeliveryPricingRepository,
   type CartWithContents,
 } from '../../domain/repositories/cart.repository';
-import type { CartDto, EmptyCartDto } from '../dto/cart-response.dto';
+import type { CartDto, CartRiderOptionDto, EmptyCartDto } from '../dto/cart-response.dto';
 import type {
   AddCartItemDto,
   ApplyCouponDto,
   SetCartAddressDto,
+  SetCartRiderDto,
+  SetFulfilmentDto,
   SetTipDto,
   UpdateCartItemDto,
 } from '../dto/cart.dto';
@@ -473,5 +476,145 @@ export class ValidateCartUseCase {
     // client needs the issue list to tell the customer what happened, and a
     // bare error would leave them staring at an empty screen.
     return this.assembler.assemble(cart);
+  }
+}
+
+@Injectable()
+export class SetFulfilmentUseCase {
+  constructor(
+    private readonly carts: CartRepository,
+    private readonly assembler: CartAssemblerService,
+  ) {}
+
+  /**
+   * Delivery or self-pickup.
+   *
+   * Switching to pickup drops any chosen rider: there is nothing for them to
+   * carry, and switching back should not quietly revive a choice made earlier.
+   */
+  async execute(userId: string, dto: SetFulfilmentDto): Promise<CartDto> {
+    const cart = await this.carts.findByUserId(userId);
+
+    if (!cart) {
+      throw new ResourceNotFoundException('Cart');
+    }
+
+    await this.carts.setFulfilment(cart.id, dto.fulfilment);
+
+    if (dto.fulfilment === OrderType.PICKUP && cart.preferredDriverId !== null) {
+      await this.carts.setPreferredDriver(cart.id, null);
+    }
+
+    const refreshed = await this.carts.findByUserId(userId);
+
+    return this.assembler.assemble(refreshed ?? cart);
+  }
+}
+
+@Injectable()
+export class ListCartRidersUseCase {
+  constructor(
+    private readonly carts: CartRepository,
+    private readonly delivery: DeliveryPricingRepository,
+    private readonly assembler: CartAssemblerService,
+  ) {}
+
+  /**
+   * Every rider free to take this order, each with what delivery would cost
+   * with them.
+   *
+   * Nobody is hidden for being dear or cheap: the customer chooses on price,
+   * rating or distance as they see fit. Cheapest first, since that is what
+   * most people look for, and nearest first among riders charging the same.
+   */
+  async execute(userId: string): Promise<CartRiderOptionDto[]> {
+    const cart = await this.carts.findByUserId(userId);
+
+    if (!cart) {
+      throw new ResourceNotFoundException('Cart');
+    }
+
+    if (cart.fulfilment === OrderType.PICKUP) {
+      return [];
+    }
+
+    const riders = await this.assembler.availableRiders(cart);
+    const address = cart.address;
+
+    const options = await Promise.all(
+      riders.map(async (rider): Promise<CartRiderOptionDto> => {
+        const quote =
+          address === null
+            ? null
+            : await this.delivery.quote(
+                cart.restaurant.latitude,
+                cart.restaurant.longitude,
+                cart.restaurant.deliveryRadiusMeters,
+                address.latitude,
+                address.longitude,
+                address.zoneId ?? cart.restaurant.zoneId,
+                rider.perKmRate,
+              );
+
+        return {
+          id: rider.driverId,
+          fullName: rider.fullName,
+          avatarUrl: rider.avatarUrl,
+          rating: rider.rating,
+          ratingCount: rider.ratingCount,
+          totalDeliveries: rider.totalDeliveries,
+          vehicleType: rider.vehicleType,
+          perKmRate: rider.perKmRate,
+          distanceToPickupKm: rider.distanceToPickupKm,
+          deliveryFee: quote?.fee ?? null,
+          isSelected: rider.driverId === cart.preferredDriverId,
+        };
+      }),
+    );
+
+    return options.sort(
+      (a, b) =>
+        (a.deliveryFee ?? Number.POSITIVE_INFINITY) - (b.deliveryFee ?? Number.POSITIVE_INFINITY) ||
+        a.distanceToPickupKm - b.distanceToPickupKm,
+    );
+  }
+}
+
+@Injectable()
+export class SetCartRiderUseCase {
+  constructor(
+    private readonly carts: CartRepository,
+    private readonly assembler: CartAssemblerService,
+  ) {}
+
+  /** Chooses the rider who delivers this order, or hands the choice back to dispatch. */
+  async execute(userId: string, dto: SetCartRiderDto): Promise<CartDto> {
+    const cart = await this.carts.findByUserId(userId);
+
+    if (!cart) {
+      throw new ResourceNotFoundException('Cart');
+    }
+
+    if (dto.driverId !== null) {
+      if (cart.fulfilment === OrderType.PICKUP) {
+        throw new BusinessRuleViolationException(
+          'You are collecting this order yourself, so it needs no rider.',
+        );
+      }
+
+      const [rider] = await this.assembler.availableRiders(cart, dto.driverId);
+
+      if (!rider) {
+        throw new BusinessRuleViolationException(
+          'That rider is no longer available. Choose another from the list.',
+        );
+      }
+    }
+
+    await this.carts.setPreferredDriver(cart.id, dto.driverId);
+
+    const refreshed = await this.carts.findByUserId(userId);
+
+    return this.assembler.assemble(refreshed ?? cart);
   }
 }

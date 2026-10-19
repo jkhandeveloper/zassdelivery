@@ -1,6 +1,6 @@
 import { Inject, Injectable, type LoggerService } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { OrderStatus, PaymentMethod } from '@prisma/client';
+import { OrderStatus, OrderType, PaymentMethod } from '@prisma/client';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 import { toPaymentQrCodes } from '@/common/dto/payment-qr-code.dto';
@@ -61,7 +61,10 @@ export class PlaceOrderUseCase {
       );
     }
 
-    if (cart.address === null) {
+    const pickup = cart.fulfilment === OrderType.PICKUP;
+    const address = pickup ? null : cart.address;
+
+    if (!pickup && address === null) {
       throw new BusinessRuleViolationException('Choose a delivery address first.');
     }
 
@@ -82,25 +85,33 @@ export class PlaceOrderUseCase {
     const totals = priced.totals;
 
     const preparationMinutes = cart.restaurant.avgPreparationMinutes;
-    const etaMinutes = priced.delivery.etaMinutes ?? preparationMinutes + 30;
+    const etaMinutes = priced.delivery.etaMinutes ?? preparationMinutes + (pickup ? 0 : 30);
 
     const order = await this.orders.place(
       {
         customerId: userId,
         restaurantId: cart.restaurantId,
-        zoneId: cart.address.zoneId ?? cart.restaurant.zoneId,
-        addressId: cart.address.id,
-        delivery: {
-          // Snapshotted: the customer may edit or delete this address later,
-          // but where the order actually went must never change.
-          line1: cart.address.line1,
-          landmark: cart.address.landmark,
-          latitude: cart.address.latitude,
-          longitude: cart.address.longitude,
-          recipientName: cart.address.recipientName ?? '',
-          recipientPhone: cart.address.recipientPhone ?? '',
-          notes: cart.address.deliveryNotes,
-        },
+        zoneId: address?.zoneId ?? cart.restaurant.zoneId,
+        type: pickup ? OrderType.PICKUP : OrderType.DELIVERY,
+        addressId: address?.id ?? null,
+        // Snapshotted: the customer may edit or delete this address later,
+        // but where the order actually went must never change. A pickup order
+        // goes nowhere, so it has none.
+        delivery:
+          address === null
+            ? null
+            : {
+                line1: address.line1,
+                landmark: address.landmark,
+                latitude: address.latitude,
+                longitude: address.longitude,
+                recipientName: address.recipientName ?? '',
+                recipientPhone: address.recipientPhone ?? '',
+                notes: address.deliveryNotes,
+              },
+        // Already confirmed free by the assembler, which blocks checkout when
+        // the chosen rider has gone.
+        preferredDriverId: pickup ? null : cart.preferredDriverId,
         totals: {
           subtotal: totals.subtotal,
           discountAmount: totals.discountAmount,
@@ -181,9 +192,10 @@ export class PlaceOrderUseCase {
         orderId: order.id,
         orderNumber: order.orderNumber,
         status: order.status,
-        statusText: OrderStateMachine.describe(order.status),
+        statusText: OrderStateMachine.describe(order.status, order.type),
         previousStatus: null,
         actor: null,
+        orderType: order.type,
         customerId: order.customerId,
         restaurantId: order.restaurantId,
         restaurantName: order.restaurant.name,

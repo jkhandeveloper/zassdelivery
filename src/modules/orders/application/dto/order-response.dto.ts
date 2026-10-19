@@ -80,6 +80,11 @@ export class OrderDto {
 
   @ApiProperty({ type: OrderPartyDto }) restaurant!: OrderPartyDto;
   @ApiPropertyOptional({ type: OrderPartyDto, nullable: true }) driver!: OrderPartyDto | null;
+  @ApiProperty({
+    type: OrderPartyDto,
+    description: 'Who ordered — the person a business hands a pickup order to.',
+  })
+  customer!: OrderPartyDto;
 
   @ApiProperty({ type: [OrderItemDto] }) items!: OrderItemDto[];
   @ApiProperty({ type: OrderTotalsDto }) totals!: OrderTotalsDto;
@@ -96,6 +101,8 @@ export class OrderDto {
   @ApiProperty({ example: 'House 14, Street 3, Gulshan Colony' }) deliveryAddress!: string;
   @ApiPropertyOptional({ nullable: true }) deliveryLandmark!: string | null;
   @ApiPropertyOptional({ nullable: true }) deliveryNotes!: string | null;
+  @ApiPropertyOptional({ nullable: true, description: 'The customer’s note for the business.' })
+  customerNote!: string | null;
   @ApiPropertyOptional({ nullable: true, example: 2.4 }) distanceKm!: number | null;
 
   @ApiPropertyOptional({ nullable: true }) estimatedDeliveryAt!: Date | null;
@@ -165,7 +172,7 @@ export function toOrderDto(order: OrderWithDetails, options: OrderDtoOptions = {
     id: order.id,
     orderNumber: order.orderNumber,
     status: order.status,
-    statusText: OrderStateMachine.describe(order.status),
+    statusText: OrderStateMachine.describe(order.status, order.type),
     type: order.type,
     restaurant: {
       id: order.restaurant.id,
@@ -181,6 +188,11 @@ export function toOrderDto(order: OrderWithDetails, options: OrderDtoOptions = {
             phone: order.driver.user.phone,
           },
     ),
+    customer: {
+      id: order.customer.id,
+      name: order.customer.fullName,
+      phone: order.customer.phone,
+    },
     items: order.items.map((line) => ({
       id: line.id,
       menuItemId: line.menuItemId,
@@ -218,6 +230,7 @@ export function toOrderDto(order: OrderWithDetails, options: OrderDtoOptions = {
     deliveryAddress: order.deliveryLine1 ?? '',
     deliveryLandmark: order.deliveryLandmark,
     deliveryNotes: order.deliveryNotes,
+    customerNote: order.customerNote,
     distanceKm: order.distanceKm === null ? null : Number(order.distanceKm),
     estimatedDeliveryAt: order.estimatedDeliveryAt,
     placedAt: order.placedAt,
@@ -234,7 +247,7 @@ export function toOrderDto(order: OrderWithDetails, options: OrderDtoOptions = {
         fromStatus: entry.fromStatus,
         toStatus: entry.toStatus,
         actor: entry.actor,
-        label: OrderStateMachine.describe(entry.toStatus),
+        label: OrderStateMachine.describe(entry.toStatus, order.type),
         note: entry.note,
         at: entry.createdAt,
       })),

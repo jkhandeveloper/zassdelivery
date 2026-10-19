@@ -61,6 +61,8 @@ export interface UpdateRiderInput {
   payoutAccountNumber?: string | null;
   /** The scan-to-pay list, replaced wholesale. */
   paymentQrCodes?: Prisma.InputJsonArray;
+  /** The rider's own per-kilometre rate; null charges the platform's. */
+  perKmRate?: number | null;
 }
 
 export interface SetRiderStatusInput {

@@ -1,4 +1,4 @@
-import { ActorType, OrderStatus } from '@prisma/client';
+import { ActorType, OrderStatus, OrderType } from '@prisma/client';
 
 import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
 
@@ -237,8 +237,21 @@ export class OrderStateMachine {
     return { allowed: true };
   }
 
-  /** Customer-facing wording for the current status. */
-  static describe(status: OrderStatus): string {
+  /**
+   * Customer-facing wording for the current status. A pickup order never sees
+   * a rider, so the steps that mention one are worded for collection instead.
+   */
+  static describe(status: OrderStatus, type: OrderType = OrderType.DELIVERY): string {
+    if (type === OrderType.PICKUP) {
+      if (status === OrderStatus.READY_FOR_PICKUP) {
+        return 'Ready — collect it from the business';
+      }
+
+      if (status === OrderStatus.DELIVERED) {
+        return 'Collected';
+      }
+    }
+
     const text: Record<OrderStatus, string> = {
       [OrderStatus.PENDING_PAYMENT]: 'Waiting for payment',
       [OrderStatus.PLACED]: 'Sent to the business',

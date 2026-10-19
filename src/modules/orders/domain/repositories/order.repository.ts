@@ -6,6 +6,7 @@ import type {
   OrderItemAddOn,
   OrderStatus,
   OrderStatusHistory,
+  OrderType,
   Payment,
   PaymentMethod,
   PaymentStatus,
@@ -75,7 +76,9 @@ export interface PlaceOrderInput {
   customerId: string;
   restaurantId: string;
   zoneId: string;
-  addressId: string;
+  /** PICKUP orders have no address, no delivery snapshot and no rider. */
+  type: OrderType;
+  addressId: string | null;
   delivery: {
     line1: string;
     landmark: string | null;
@@ -84,7 +87,9 @@ export interface PlaceOrderInput {
     recipientName: string;
     recipientPhone: string;
     notes: string | null;
-  };
+  } | null;
+  /** The rider the customer chose, offered the run first. */
+  preferredDriverId: string | null;
   totals: {
     subtotal: number;
     discountAmount: number;
