@@ -257,10 +257,16 @@ export class EnvironmentVariables {
   TEXTBEE_DEVICE_ID?: string;
 
   // A fixed code every OTP check accepts, for developer testing. Refused in
-  // production by `validateEnvironment`.
+  // production by `validateEnvironment` unless ALLOW_DEV_OTP_IN_PRODUCTION is
+  // also set — a deliberate, separate switch, so a copied .env cannot turn it
+  // on by accident.
   @IsOptional()
   @Matches(/^(\d{6})?$/, { message: 'DEV_OTP_CODE must be six digits, e.g. "123456"' })
   DEV_OTP_CODE?: string;
+
+  @Transform(toBoolean)
+  @IsBoolean()
+  ALLOW_DEV_OTP_IN_PRODUCTION: boolean = false;
 
   // ── Object storage (MinIO / S3) ──
   // Credentials are absent on a machine without MinIO running, so the pair is
@@ -336,10 +342,16 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
   });
 
   // A code anyone can type would let anyone sign in as anyone and close any
-  // delivery, so a production process will not start with one set.
-  if (validated.NODE_ENV === NodeEnv.Production && validated.DEV_OTP_CODE) {
+  // delivery, so a production process will not start with one set — unless
+  // the override says, in so many words, that this is intended.
+  if (
+    validated.NODE_ENV === NodeEnv.Production &&
+    validated.DEV_OTP_CODE &&
+    !validated.ALLOW_DEV_OTP_IN_PRODUCTION
+  ) {
     throw new Error(
-      'Invalid environment configuration:\n  • DEV_OTP_CODE: must not be set in production',
+      'Invalid environment configuration:\n  • DEV_OTP_CODE: must not be set in production ' +
+        '(set ALLOW_DEV_OTP_IN_PRODUCTION=true to override)',
     );
   }
 

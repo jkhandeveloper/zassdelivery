@@ -83,4 +83,13 @@ describe('validateEnvironment', () => {
     // boot attempt instead of forcing an operator to fix them one by one.
     expect(() => validateEnvironment(env)).toThrow(/DATABASE_URL[\s\S]*JWT_ACCESS_SECRET/);
   });
+
+  it('refuses a dev OTP code in production without the explicit override', () => {
+    const env = { ...validEnv(), NODE_ENV: 'production', DEV_OTP_CODE: '123456' };
+
+    expect(() => validateEnvironment(env)).toThrow(/DEV_OTP_CODE/);
+    expect(validateEnvironment({ ...env, ALLOW_DEV_OTP_IN_PRODUCTION: 'true' }).DEV_OTP_CODE).toBe(
+      '123456',
+    );
+  });
 });

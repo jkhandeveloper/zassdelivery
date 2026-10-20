@@ -32,9 +32,13 @@ export const appConfig = registerAs(APP_CONFIG_KEY, () => {
     /**
      * Developer testing only: a fixed six-digit code that every phone
      * verification accepts, and whose first four digits become every delivery
-     * code. Always null in production.
+     * code. Null in production unless ALLOW_DEV_OTP_IN_PRODUCTION=true.
      */
-    devOtpCode: nodeEnv === NodeEnv.Production ? null : process.env.DEV_OTP_CODE?.trim() || null,
+    devOtpCode:
+      nodeEnv === NodeEnv.Production &&
+      process.env.ALLOW_DEV_OTP_IN_PRODUCTION?.trim().toLowerCase() !== 'true'
+        ? null
+        : process.env.DEV_OTP_CODE?.trim() || null,
     /** Requests are aborted after this many milliseconds by the timeout interceptor. */
     requestTimeoutMs: 15000,
     /** Grace period given to in-flight requests during shutdown. */

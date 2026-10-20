@@ -183,6 +183,14 @@ async function bootstrap(): Promise<void> {
   const baseUrl = `http://localhost:${application.port}/${globalPrefix}/v${application.apiVersion}`;
   logger.log?.(`ZassDelivery API listening on ${baseUrl}`, 'Bootstrap');
   logger.log?.(`Environment: ${application.nodeEnv}`, 'Bootstrap');
+  if (application.devOtpCode !== null) {
+    // Said at every boot, so nobody forgets the switch is on.
+    logger.warn?.(
+      'DEV_OTP_CODE is active: every phone and delivery code check accepts the fixed ' +
+        `code${application.isProduction ? ' — IN PRODUCTION. Remove it before real customers use this.' : '.'}`,
+      'Bootstrap',
+    );
+  }
   if (swagger.enabled && !application.isProduction) {
     logger.log?.(
       `Swagger UI: http://localhost:${application.port}/${globalPrefix}/${swagger.path}`,
