@@ -31,8 +31,8 @@ export const appConfig = registerAs(APP_CONFIG_KEY, () => {
     currency: process.env.DEFAULT_CURRENCY ?? 'PKR',
     /**
      * Developer testing only: a fixed six-digit code that every phone
-     * verification accepts, and whose first four digits become every delivery
-     * code. Null in production unless ALLOW_DEV_OTP_IN_PRODUCTION=true.
+     * verification accepts. Delivery codes are always random.
+     * Null in production unless ALLOW_DEV_OTP_IN_PRODUCTION=true.
      */
     devOtpCode:
       nodeEnv === NodeEnv.Production &&

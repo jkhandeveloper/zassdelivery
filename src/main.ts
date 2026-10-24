@@ -186,7 +186,7 @@ async function bootstrap(): Promise<void> {
   if (application.devOtpCode !== null) {
     // Said at every boot, so nobody forgets the switch is on.
     logger.warn?.(
-      'DEV_OTP_CODE is active: every phone and delivery code check accepts the fixed ' +
+      'DEV_OTP_CODE is active: every phone verification accepts the fixed ' +
         `code${application.isProduction ? ' — IN PRODUCTION. Remove it before real customers use this.' : '.'}`,
       'Bootstrap',
     );

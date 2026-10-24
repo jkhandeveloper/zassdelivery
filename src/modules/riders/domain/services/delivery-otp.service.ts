@@ -1,9 +1,7 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 
-import { Inject, Injectable, Optional } from '@nestjs/common';
-import type { ConfigType } from '@nestjs/config';
+import { Injectable } from '@nestjs/common';
 
-import { appConfig } from '@/config';
 import { BusinessRuleViolationException } from '@/common/exceptions/domain.exception';
 
 /** Digits in a delivery confirmation code. */
@@ -44,23 +42,11 @@ export interface OtpState {
  */
 @Injectable()
 export class DeliveryOtpService {
-  constructor(
-    @Optional()
-    @Inject(appConfig.KEY)
-    private readonly app?: Pick<ConfigType<typeof appConfig>, 'devOtpCode'>,
-  ) {}
-
   /**
-   * A fresh code, returned in clear exactly once. With a developer code set,
-   * it is that code's first four digits every time.
+   * A fresh random code, returned in clear exactly once. DEV_OTP_CODE does not
+   * apply here: the customer always receives the real code by SMS.
    */
   generate(): string {
-    const devCode = this.app?.devOtpCode;
-
-    if (devCode) {
-      return devCode.slice(0, OTP_LENGTH);
-    }
-
     return String(randomInt(0, 10 ** OTP_LENGTH)).padStart(OTP_LENGTH, '0');
   }
 
