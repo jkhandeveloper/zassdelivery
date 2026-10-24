@@ -198,11 +198,15 @@ export class UpdateMenuItemUseCase {
     }
 
     // Either value may be absent from the patch, so validate the combination
-    // that will actually be stored rather than just what was sent.
+    // that will actually be stored rather than just what was sent. An explicit
+    // null discount clears the offer, so it must not fall back to the old one.
     assertPricing(
       dto.basePrice ?? Number(existing.basePrice),
-      dto.discountedPrice ??
-        (existing.discountedPrice === null ? null : Number(existing.discountedPrice)),
+      dto.discountedPrice !== undefined
+        ? dto.discountedPrice
+        : existing.discountedPrice === null
+          ? null
+          : Number(existing.discountedPrice),
     );
 
     if (dto.availableFrom !== undefined || dto.availableTo !== undefined) {
