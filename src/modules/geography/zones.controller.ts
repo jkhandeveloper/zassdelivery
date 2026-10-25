@@ -7,7 +7,7 @@ import { ZoneDto } from './application/dto/zone-response.dto';
 import { ListZonesUseCase } from './application/use-cases/zones.use-cases';
 
 /**
- * Where ZassDelivery delivers.
+ * Where ZassFood delivers.
  *
  * Public because it has to be: an address is only accepted when its coordinates
  * fall inside a zone, so a customer who cannot see the service area before

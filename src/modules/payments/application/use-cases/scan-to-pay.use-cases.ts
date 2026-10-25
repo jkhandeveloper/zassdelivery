@@ -129,7 +129,7 @@ export class MarkPaymentReceivedUseCase {
         ? `rider ${order.driver?.user.fullName ?? ''}`.trim()
         : recipient === 'RESTAURANT'
           ? order.restaurant.name
-          : 'ZassDelivery';
+          : 'ZassFood';
 
     const payment = await this.payments.settleManualTransfer({
       orderId: order.id,

@@ -113,7 +113,7 @@ export class SendTestPushUseCase {
     const result = await this.notify.notify({
       userId: actor.id,
       type: NotificationType.SYSTEM,
-      title: 'ZassDelivery test notification',
+      title: 'ZassFood test notification',
       body: dto.message ?? 'If you can read this, push notifications are working.',
       data: { kind: 'test' },
     });

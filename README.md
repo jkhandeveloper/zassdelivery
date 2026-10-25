@@ -1,4 +1,4 @@
-# ZassDelivery API
+# ZassFood API
 
 Food delivery platform backend serving **Pabbi**, **Nowshera** and **Peshawar**, Pakistan.
 

@@ -96,7 +96,7 @@ export class UnregisterDeviceDto {
 
 export class TestPushDto {
   @ApiPropertyOptional({
-    example: 'Testing push from the ZassDelivery dashboard.',
+    example: 'Testing push from the ZassFood dashboard.',
     maxLength: 200,
   })
   @IsOptional()

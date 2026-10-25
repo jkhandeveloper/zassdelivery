@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// ZassDelivery — production database schema
+// ZassFood — production database schema
 //
 // Conventions used throughout:
 //   • Money is Decimal(10,2) — never Float. Wallet balances use Decimal(12,2).

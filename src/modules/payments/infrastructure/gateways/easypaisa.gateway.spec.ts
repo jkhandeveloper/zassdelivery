@@ -40,7 +40,7 @@ const REQUEST = {
   amount: 1240.5,
   currency: 'PKR',
   orderNumber: 'ZD-260810-0008',
-  description: 'ZassDelivery order ZD-260810-0008',
+  description: 'ZassFood order ZD-260810-0008',
   customerPhone: '+923001234567',
   customerEmail: 'ahmad@example.pk',
   expiresAt: new Date('2026-08-10T12:15:00.000Z'),

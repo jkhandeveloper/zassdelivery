@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # ─────────────────────────────────────────────────────────────
-# ZassDelivery API — multi-stage production image
+# ZassFood API — multi-stage production image
 # ─────────────────────────────────────────────────────────────
 
 # ---- Base ---------------------------------------------------

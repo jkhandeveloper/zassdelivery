@@ -71,7 +71,7 @@ function configureSwagger(
       tagsSorter: 'alpha',
       operationsSorter: 'alpha',
     },
-    customSiteTitle: 'ZassDelivery API Reference',
+    customSiteTitle: 'ZassFood API Reference',
   });
 }
 
@@ -181,7 +181,7 @@ async function bootstrap(): Promise<void> {
   server.headersTimeout = 66000;
 
   const baseUrl = `http://localhost:${application.port}/${globalPrefix}/v${application.apiVersion}`;
-  logger.log?.(`ZassDelivery API listening on ${baseUrl}`, 'Bootstrap');
+  logger.log?.(`ZassFood API listening on ${baseUrl}`, 'Bootstrap');
   logger.log?.(`Environment: ${application.nodeEnv}`, 'Bootstrap');
   if (application.devOtpCode !== null) {
     // Said at every boot, so nobody forgets the switch is on.

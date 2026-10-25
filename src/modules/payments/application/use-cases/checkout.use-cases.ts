@@ -317,7 +317,7 @@ export class StartCheckoutUseCase {
       amount,
       currency: payment.currency,
       orderNumber: order.orderNumber,
-      description: `ZassDelivery order ${order.orderNumber}`,
+      description: `ZassFood order ${order.orderNumber}`,
       customerPhone: payment.user.phone,
       customerEmail: payment.user.email,
       expiresAt: payment.expiresAt ?? expiresAt,

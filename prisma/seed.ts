@@ -1449,7 +1449,7 @@ async function seedContent(): Promise<void> {
     {
       question: 'How do I pay for my order?',
       answer:
-        'Cash on delivery is available everywhere. You can also pay from your ZassDelivery wallet.',
+        'Cash on delivery is available everywhere. You can also pay from your ZassFood wallet.',
       questionUr: 'میں اپنے آرڈر کی ادائیگی کیسے کروں؟',
       category: 'payments',
       sortOrder: 1,
@@ -1745,7 +1745,7 @@ async function seedSampleOrder(): Promise<void> {
 // ═════════════════════════════════════════════════════════════
 
 async function main(): Promise<void> {
-  console.warn('Seeding ZassDelivery database…\n');
+  console.warn('Seeding ZassFood database…\n');
 
   console.warn('Roles & permissions:');
   await seedRbac();

@@ -1,7 +1,7 @@
 {
   "name": "zassdelivery-api",
   "version": "0.1.0",
-  "description": "ZassDelivery — food delivery platform API (Pabbi · Nowshera · Peshawar, Pakistan)",
+  "description": "ZassFood — food delivery platform API (Pabbi · Nowshera · Peshawar, Pakistan)",
   "private": true,
   "license": "UNLICENSED",
   "engines": {

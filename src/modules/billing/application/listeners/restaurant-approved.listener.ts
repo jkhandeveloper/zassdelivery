@@ -75,7 +75,7 @@ export class RestaurantApprovedListener {
         type: NotificationType.SYSTEM,
         title: 'Your first month is free',
         body:
-          `${payload.restaurantName} is live. Your first month on ZassDelivery costs nothing — ` +
+          `${payload.restaurantName} is live. Your first month on ZassFood costs nothing — ` +
           `your first platform fee falls due on ${trial.periodEnd.toLocaleDateString('en-GB', {
             day: 'numeric',
             month: 'long',

@@ -119,7 +119,7 @@ export class PhoneOtpService {
     try {
       await this.sms.send(
         phone,
-        `${code} is your ZassDelivery verification code. It expires in ` +
+        `${code} is your ZassFood verification code. It expires in ` +
           `${OTP_TTL_SECONDS / 60} minutes. Never share it with anyone.`,
       );
     } catch (error) {
