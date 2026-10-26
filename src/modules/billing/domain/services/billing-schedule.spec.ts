@@ -53,6 +53,15 @@ describe('trialPeriod', () => {
     expect(trial.periodStart).toEqual(START);
     expect(trial.periodEnd).toEqual(addDays(START, BILLING_CYCLE_DAYS));
   });
+
+  it('can be shortened, so the first fee falls due when the shorter trial ends', () => {
+    const trial = trialPeriod(START, 1, 1);
+    const firstPaid = periodFrom(trial.periodEnd, 1);
+
+    expect(trial.periodEnd).toEqual(addDays(START, 1));
+    expect(firstPaid.dueAt).toEqual(addDays(START, 1));
+    expect(firstPaid.blockAt).toEqual(addDays(START, 2));
+  });
 });
 
 describe('daysUntil', () => {

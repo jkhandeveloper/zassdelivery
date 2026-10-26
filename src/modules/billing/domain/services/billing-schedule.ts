@@ -69,27 +69,34 @@ export function daysUntil(target: Date, now: Date): number {
 }
 
 /** The period that follows one starting at `periodStart`. */
-export function periodFrom(periodStart: Date): BillingPeriod {
+export function periodFrom(periodStart: Date, graceDays = BILLING_GRACE_DAYS): BillingPeriod {
   const periodEnd = addDays(periodStart, BILLING_CYCLE_DAYS);
 
   return {
     periodStart,
     periodEnd,
     dueAt: periodStart,
-    blockAt: addDays(periodStart, BILLING_GRACE_DAYS),
+    blockAt: addDays(periodStart, graceDays),
   };
 }
 
 /**
- * The free first month, starting the day a listing is approved.
+ * The free trial, starting the day a listing is approved.
  *
  * Billing begins at approval rather than at registration because an unapproved
  * listing cannot take an order, and charging for a month a vendor was not
  * allowed to trade in is how a platform loses the vendor before it earns
  * anything from them.
+ *
+ * A month by default. Shorter only where configuration says so, to run the
+ * whole cycle in a test environment without waiting thirty days.
  */
-export function trialPeriod(approvedAt: Date): BillingPeriod {
-  return periodFrom(approvedAt);
+export function trialPeriod(
+  approvedAt: Date,
+  trialDays = BILLING_CYCLE_DAYS,
+  graceDays = BILLING_GRACE_DAYS,
+): BillingPeriod {
+  return { ...periodFrom(approvedAt, graceDays), periodEnd: addDays(approvedAt, trialDays) };
 }
 
 /**

@@ -1333,7 +1333,7 @@ async function seedContent(): Promise<void> {
     },
     {
       key: 'billing.vendor_monthly_fee',
-      value: '2000',
+      value: '1000',
       valueType: SettingValueType.NUMBER,
       group: 'billing',
       isPublic: false,

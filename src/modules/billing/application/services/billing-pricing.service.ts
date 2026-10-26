@@ -18,7 +18,7 @@ export const BILLING_QR_SETTING_KEY = 'billing.payment_qr_codes';
  * number that an administrator can correct is a far smaller problem than
  * billing silently halting.
  */
-export const FALLBACK_MONTHLY_FEE = 2000;
+export const FALLBACK_MONTHLY_FEE = 1000;
 
 /**
  * What a vendor pays, and where they pay it.

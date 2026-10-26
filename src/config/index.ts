@@ -1,4 +1,5 @@
 import { appConfig } from './app.config';
+import { billingConfig } from './billing.config';
 import { databaseConfig } from './database.config';
 import { jwtConfig } from './jwt.config';
 import { loggerConfig } from './logger.config';
@@ -11,6 +12,7 @@ import { swaggerConfig } from './swagger.config';
 import { throttleConfig } from './throttle.config';
 
 export * from './app.config';
+export * from './billing.config';
 export * from './database.config';
 export * from './env.validation';
 export * from './jwt.config';
@@ -36,4 +38,5 @@ export const configurations = [
   notificationsConfig,
   smsConfig,
   storageConfig,
+  billingConfig,
 ];

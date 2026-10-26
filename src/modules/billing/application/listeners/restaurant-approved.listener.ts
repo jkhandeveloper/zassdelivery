@@ -1,8 +1,10 @@
 import { Inject, Injectable, type LoggerService } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
 import { NotificationType } from '@prisma/client';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
+import { billingConfig } from '@/config';
 import { NotifyService } from '@/modules/notifications/application/use-cases/notify.service';
 import {
   RestaurantEvents,
@@ -31,6 +33,8 @@ export class RestaurantApprovedListener {
   constructor(
     private readonly billing: BillingRepository,
     private readonly notify: NotifyService,
+    @Inject(billingConfig.KEY)
+    private readonly config: ConfigType<typeof billingConfig>,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -46,7 +50,11 @@ export class RestaurantApprovedListener {
         return;
       }
 
-      const trial = trialPeriod(new Date(payload.approvedAt));
+      const trial = trialPeriod(
+        new Date(payload.approvedAt),
+        this.config.trialDays,
+        this.config.graceDays,
+      );
 
       const subscription = await this.billing.createSubscription({
         restaurantId: payload.restaurantId,
@@ -73,9 +81,10 @@ export class RestaurantApprovedListener {
       await this.notify.notify({
         userId: payload.ownerId,
         type: NotificationType.SYSTEM,
-        title: 'Your first month is free',
+        title: 'Your free trial has started',
         body:
-          `${payload.restaurantName} is live. Your first month on ZassFood costs nothing — ` +
+          `${payload.restaurantName} is live. Your first ${this.config.trialDays} ` +
+          `${this.config.trialDays === 1 ? 'day' : 'days'} on ZassFood cost nothing — ` +
           `your first platform fee falls due on ${trial.periodEnd.toLocaleDateString('en-GB', {
             day: 'numeric',
             month: 'long',

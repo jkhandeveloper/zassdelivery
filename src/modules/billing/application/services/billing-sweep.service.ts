@@ -1,8 +1,11 @@
-import { Inject, Injectable, type LoggerService } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Inject, Injectable, type LoggerService, type OnModuleInit } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
+import { SchedulerRegistry } from '@nestjs/schedule';
 import { NotificationType } from '@prisma/client';
+import { CronJob } from 'cron';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
+import { billingConfig } from '@/config';
 import { NotifyService } from '@/modules/notifications/application/use-cases/notify.service';
 
 import {
@@ -10,7 +13,6 @@ import {
   type InvoiceWithContext,
 } from '../../domain/repositories/billing.repository';
 import {
-  BILLING_GRACE_DAYS,
   REMINDER_LEAD_DAYS,
   daysUntil,
   periodFrom,
@@ -54,7 +56,7 @@ function plural(count: number, word: string): string {
  * chosen by how much time is actually left, not by which night it is.
  */
 @Injectable()
-export class BillingSweepService {
+export class BillingSweepService implements OnModuleInit {
   private readonly context = BillingSweepService.name;
 
   /**
@@ -67,16 +69,31 @@ export class BillingSweepService {
     private readonly billing: BillingRepository,
     private readonly pricing: BillingPricingService,
     private readonly notify: NotifyService,
+    private readonly scheduler: SchedulerRegistry,
+    @Inject(billingConfig.KEY)
+    private readonly config: ConfigType<typeof billingConfig>,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
 
   /**
-   * Two in the morning: after the kitchens have closed and before anyone opens.
-   * A restaurant that is going to be suspended should find out overnight, not
-   * halfway through a lunch service.
+   * Two in the morning by default: after the kitchens have closed and before
+   * anyone opens. A restaurant that is going to be suspended should find out
+   * overnight, not halfway through a lunch service.
+   *
+   * Registered here rather than with `@Cron`, because a decorator reads its
+   * schedule when the file is imported — before `.env` has been loaded.
    */
-  @Cron(CronExpression.EVERY_DAY_AT_2AM, { name: 'billing-sweep' })
+  onModuleInit(): void {
+    const job = CronJob.from({
+      cronTime: this.config.sweepCron,
+      onTick: () => this.sweep(),
+    });
+
+    this.scheduler.addCronJob('billing-sweep', job);
+    job.start();
+  }
+
   async sweep(): Promise<void> {
     if (this.sweeping) {
       return;
@@ -124,7 +141,7 @@ export class BillingSweepService {
     const restaurants = await this.billing.findActiveRestaurantsWithoutSubscription(BATCH_SIZE);
 
     for (const restaurant of restaurants) {
-      const trial = trialPeriod(now);
+      const trial = trialPeriod(now, this.config.trialDays, this.config.graceDays);
 
       const subscription = await this.billing.createSubscription({
         restaurantId: restaurant.id,
@@ -160,7 +177,7 @@ export class BillingSweepService {
     const subscriptions = await this.billing.findSubscriptionsNeedingInvoice(BATCH_SIZE);
 
     for (const subscription of subscriptions) {
-      const period = periodFrom(subscription.currentPeriodEnd);
+      const period = periodFrom(subscription.currentPeriodEnd, this.config.graceDays);
       const amount = await this.pricing.effectiveFee(subscription);
 
       await this.billing.createInvoice({
@@ -278,7 +295,7 @@ export class BillingSweepService {
         invoice,
         `${invoice.restaurant.name} has been closed`,
         `Invoice ${invoice.invoiceNumber} (${invoice.currency} ${Number(invoice.amount)}) went unpaid ` +
-          `for ${plural(BILLING_GRACE_DAYS, 'day')} after its due date, so your listing is no longer ` +
+          `for ${plural(this.config.graceDays, 'day')} after its due date, so your listing is no longer ` +
           `taking orders. Pay it and we'll reopen you as soon as we've confirmed the transfer.`,
       );
     }

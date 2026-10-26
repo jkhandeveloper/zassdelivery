@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { NotificationType, SubscriptionInvoiceStatus, SubscriptionStatus } from '@prisma/client';
 
+import { billingConfig } from '@/config';
 import {
   BusinessRuleViolationException,
   ResourceNotFoundException,
@@ -26,7 +28,6 @@ import type {
   UpdatePaymentRecordDto,
   VoidInvoiceDto,
 } from '../dto/billing.dto';
-import { BILLING_GRACE_DAYS } from '../../domain/services/billing-schedule';
 import { BillingPricingService } from '../services/billing-pricing.service';
 
 /** Invoices an administrator may still act on. */
@@ -416,6 +417,8 @@ export class ReinstateVendorUseCase {
     private readonly billing: BillingRepository,
     private readonly pricing: BillingPricingService,
     private readonly notify: NotifyService,
+    @Inject(billingConfig.KEY)
+    private readonly config: ConfigType<typeof billingConfig>,
   ) {}
 
   /**
@@ -432,7 +435,10 @@ export class ReinstateVendorUseCase {
       throw new ResourceNotFoundException('Subscription', subscriptionId);
     }
 
-    const updated = await this.billing.reinstateByAdmin(subscriptionId, BILLING_GRACE_DAYS);
+    // At least a day, even where configuration allows no grace at all, so the
+    // next sweep cannot close the listing again before the vendor can pay.
+    const graceDays = Math.max(this.config.graceDays, 1);
+    const updated = await this.billing.reinstateByAdmin(subscriptionId, graceDays);
     const effectiveFee = await this.pricing.effectiveFee(updated);
 
     const owes = updated.status === SubscriptionStatus.PAST_DUE;
@@ -443,7 +449,7 @@ export class ReinstateVendorUseCase {
       title: `${updated.restaurant.name} is open again`,
       body: owes
         ? `You're taking orders again. There's still a platform fee outstanding — you have ` +
-          `${BILLING_GRACE_DAYS} days to settle it before the listing closes again.`
+          `${graceDays} ${graceDays === 1 ? 'day' : 'days'} to settle it before the listing closes again.`
         : "You're taking orders again.",
       data: { kind: 'billing', restaurantId: updated.restaurantId },
     });

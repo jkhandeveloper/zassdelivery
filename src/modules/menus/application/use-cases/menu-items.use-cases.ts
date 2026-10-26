@@ -66,6 +66,8 @@ export class ListMenuItemsUseCase {
 
     if (actor) {
       await this.ownership.assertRestaurant(restaurantId, actor);
+    } else {
+      await this.ownership.assertPublic(restaurantId);
     }
 
     const orderBy = buildOrderBy(query.sortBy, query.sortOrder, MENU_ITEM_SORT_FIELDS, 'sortOrder');
@@ -100,6 +102,7 @@ export class GetMenuItemUseCase {
   constructor(
     private readonly items: MenuItemRepository,
     private readonly presenter: MenuItemPresenter,
+    private readonly ownership: MenuOwnershipGuardService,
   ) {}
 
   async execute(id: string, includePrivate = false): Promise<MenuItemDto> {
@@ -112,6 +115,10 @@ export class GetMenuItemUseCase {
     // A hidden dish stays reachable to its owner but is invisible publicly.
     if (!includePrivate && item.status === MenuItemStatus.HIDDEN) {
       throw new ResourceNotFoundException('Menu item', id);
+    }
+
+    if (!includePrivate) {
+      await this.ownership.assertPublic(item.restaurantId);
     }
 
     return this.presenter.present(item, includePrivate);
@@ -277,6 +284,8 @@ export class MenuItemImagesUseCase {
     if (!item) {
       throw new ResourceNotFoundException('Menu item', itemId);
     }
+
+    await this.ownership.assertPublic(item.restaurantId);
 
     return (await this.items.findImages(itemId)).map(toItemImageDto);
   }

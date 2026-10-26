@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { RestaurantStatus } from '@prisma/client';
 
 import {
   BusinessRuleViolationException,
@@ -46,6 +47,19 @@ export class MenuOwnershipGuardService {
     }
 
     assertCanManage(restaurant, actor);
+  }
+
+  /**
+   * The public counterpart: a customer may only see the menu of a listing that
+   * is live. Pending, rejected and suspended businesses — including one closed
+   * for an unpaid platform fee — answer 404, the same as their detail page.
+   */
+  async assertPublic(restaurantId: string): Promise<void> {
+    const restaurant = await this.restaurants.findById(restaurantId);
+
+    if (!restaurant || restaurant.status !== RestaurantStatus.ACTIVE) {
+      throw new ResourceNotFoundException('Business', restaurantId);
+    }
   }
 }
 
@@ -303,10 +317,15 @@ export class ReorderMenuCategoriesUseCase {
 
 @Injectable()
 export class GetPublicMenuUseCase {
-  constructor(private readonly menus: MenuRepository) {}
+  constructor(
+    private readonly menus: MenuRepository,
+    private readonly ownership: MenuOwnershipGuardService,
+  ) {}
 
   /** The storefront menu: active menus and sections only. */
   async execute(restaurantId: string): Promise<MenuDto[]> {
+    await this.ownership.assertPublic(restaurantId);
+
     return (await this.menus.findPublicMenu(restaurantId)).map(toMenuDto);
   }
 }

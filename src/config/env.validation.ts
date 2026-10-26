@@ -152,6 +152,24 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   SWAGGER_PATH: string = 'docs';
 
+  // ── Vendor billing ──
+  // Shortened only to exercise the trial → suspension cycle in testing.
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  BILLING_TRIAL_DAYS: number = 1;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(30)
+  BILLING_GRACE_DAYS: number = 1;
+
+  @IsString()
+  @IsNotEmpty()
+  BILLING_SWEEP_CRON: string = '0 2 * * *';
+
   // ── Payments ──
   // Gateway credentials are issued per merchant and are absent in development,
   // so every one of them is optional. An unconfigured gateway reports itself
