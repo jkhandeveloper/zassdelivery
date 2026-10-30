@@ -153,18 +153,19 @@ export class EnvironmentVariables {
   SWAGGER_PATH: string = 'docs';
 
   // ── Vendor billing ──
-  // Shortened only to exercise the trial → suspension cycle in testing.
+  // Shortened only to exercise the trial → suspension cycle in testing. These
+  // defaults reach `process.env`, so they are what an unset variable really means.
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(365)
-  BILLING_TRIAL_DAYS: number = 1;
+  BILLING_TRIAL_DAYS: number = 30;
 
   @Type(() => Number)
   @IsInt()
   @Min(0)
   @Max(30)
-  BILLING_GRACE_DAYS: number = 1;
+  BILLING_GRACE_DAYS: number = 3;
 
   @IsString()
   @IsNotEmpty()

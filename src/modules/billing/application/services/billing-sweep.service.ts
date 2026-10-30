@@ -266,27 +266,28 @@ export class BillingSweepService implements OnModuleInit {
   /**
    * Grace exhausted. The listing comes down.
    *
-   * Unless the platform has published nowhere to pay. A vendor cannot settle an
-   * invoice against an empty list of QR codes, and closing a restaurant for
-   * failing to do the impossible is indefensible — so this stage stands down
-   * entirely until somebody configures an account. Every other stage keeps
-   * running, so the invoices, the reminders and the overdue notices are all
-   * still there the moment it is.
+   * Whether or not the platform has published anywhere to pay: a subscription
+   * that has run out has run out, and an operator who has not added a QR code
+   * should not be giving every vendor free trading by accident. Such a vendor
+   * is pointed at support instead, and the warning says who is waiting on it.
    */
   private async suspendUnpaid(now: Date): Promise<number> {
-    const payTo = await this.pricing.payToQrCodes();
+    const invoices = await this.billing.findInvoicesToBlock(now, BATCH_SIZE);
 
-    if (payTo.length === 0) {
-      this.logger.warn?.(
-        'Nobody was suspended: the platform has published no payment QR codes, so no ' +
-          'vendor has anywhere to send their fee.',
-        this.context,
-      );
-
+    if (invoices.length === 0) {
       return 0;
     }
 
-    const invoices = await this.billing.findInvoicesToBlock(now, BATCH_SIZE);
+    const payTo = await this.pricing.payToQrCodes();
+    const canPay = payTo.length > 0;
+
+    if (!canPay) {
+      this.logger.warn?.(
+        `Suspending ${plural(invoices.length, 'vendor')} while the platform has published no ` +
+          'payment QR codes: they have nowhere to send their fee until one is added.',
+        this.context,
+      );
+    }
 
     for (const invoice of invoices) {
       await this.billing.suspendForNonPayment(invoice.subscriptionId);
@@ -296,7 +297,10 @@ export class BillingSweepService implements OnModuleInit {
         `${invoice.restaurant.name} has been closed`,
         `Invoice ${invoice.invoiceNumber} (${invoice.currency} ${Number(invoice.amount)}) went unpaid ` +
           `for ${plural(this.config.graceDays, 'day')} after its due date, so your listing is no longer ` +
-          `taking orders. Pay it and we'll reopen you as soon as we've confirmed the transfer.`,
+          `taking orders. ` +
+          (canPay
+            ? `Pay it and we'll reopen you as soon as we've confirmed the transfer.`
+            : `Contact support to pay it and reopen.`),
       );
     }
 
