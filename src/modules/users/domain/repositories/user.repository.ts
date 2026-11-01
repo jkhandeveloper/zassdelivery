@@ -36,6 +36,13 @@ export interface UpdateUserInput {
   status?: UserStatus;
 }
 
+/**
+ * What an erased account's phone number starts with. A real number is `+92…`,
+ * so this also tells an account its owner erased from one an administrator
+ * removed, which can still be restored.
+ */
+export const ERASED_PHONE_PREFIX = 'del_';
+
 export abstract class UserRepository {
   abstract findMany(filter: ListUsersFilter): Promise<PaginatedResult<User>>;
   abstract findById(id: string, includeDeleted?: boolean): Promise<User | null>;
@@ -47,6 +54,17 @@ export abstract class UserRepository {
   /** Soft delete: sets `deletedAt` and revokes every session. */
   abstract softDelete(id: string): Promise<void>;
   abstract restore(id: string): Promise<User>;
+  /**
+   * Whether an order is still moving through this account, as the customer,
+   * the owner of the business or the rider.
+   */
+  abstract hasActiveOrders(id: string): Promise<boolean>;
+  /**
+   * Removes everything that identifies this person, and closes what they run.
+   * Order and payment records stay, stripped of personal details. Returns the
+   * URLs of the files they uploaded, for the caller to take out of storage.
+   */
+  abstract erase(id: string): Promise<string[]>;
   abstract countByRole(): Promise<Record<string, number>>;
   /** VENDOR_STAFF accounts registered against one restaurant. */
   abstract findStaffByRestaurant(restaurantId: string): Promise<User[]>;

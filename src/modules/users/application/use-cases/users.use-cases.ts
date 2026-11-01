@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, type LoggerService } from '@nestjs/common';
 import { UserRole, UserStatus } from '@prisma/client';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 import {
   BusinessRuleViolationException,
@@ -9,9 +10,11 @@ import {
 import type { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
 import { buildOrderBy } from '@/common/utils/pagination.util';
 import { PasswordService } from '@/modules/auth/application/services/password.service';
+import { TokenService } from '@/modules/auth/application/services/token.service';
 import { RefreshTokenRepository } from '@/modules/auth/domain/repositories/refresh-token.repository';
+import { FILE_STORAGE, type FileStoragePort } from '@/modules/storage/domain/file-storage.port';
 
-import { UserRepository } from '../../domain/repositories/user.repository';
+import { ERASED_PHONE_PREFIX, UserRepository } from '../../domain/repositories/user.repository';
 import type { AdminUpdateUserDto, ChangeUserStatusDto, CreateUserDto } from '../dto/user.dto';
 import { USER_SORT_FIELDS, type ListUsersQueryDto } from '../dto/user-query.dto';
 import { toUserDto, type UserDto } from '../dto/user-response.dto';
@@ -192,6 +195,85 @@ export class DeleteUserUseCase {
   }
 }
 
+/** Where a file lives in the store, read back off the URL saved on its record. */
+function storageKey(url: string): string | null {
+  const [, key] = url.split('/uploads/');
+
+  return key === undefined || key === '' ? null : key;
+}
+
+@Injectable()
+export class DeleteMyAccountUseCase {
+  constructor(
+    private readonly users: UserRepository,
+    private readonly refreshTokens: RefreshTokenRepository,
+    private readonly tokens: TokenService,
+    @Inject(FILE_STORAGE)
+    private readonly storage: FileStoragePort,
+    @Inject(WINSTON_MODULE_NEST_PROVIDER)
+    private readonly logger: LoggerService,
+  ) {}
+
+  /**
+   * Deletes the caller's own account, for good.
+   *
+   * Unlike an administrator's soft delete this cannot be undone, because the app
+   * stores require personal details to actually go. An order in progress holds
+   * it up: a customer, rider or kitchen is still relying on those details.
+   */
+  async execute(userId: string, sessionId: string): Promise<{ message: string }> {
+    const existing = await this.users.findById(userId);
+
+    if (!existing) {
+      throw new ResourceNotFoundException('User', userId);
+    }
+
+    if (existing.role === UserRole.ADMIN || existing.role === UserRole.SUPER_ADMIN) {
+      throw new BusinessRuleViolationException(
+        'Administrator accounts have to be removed by another administrator.',
+      );
+    }
+
+    if (await this.users.hasActiveOrders(userId)) {
+      throw new BusinessRuleViolationException(
+        'You have an order in progress. You can delete your account once it has finished.',
+      );
+    }
+
+    const files = await this.users.erase(userId);
+
+    await this.refreshTokens.revokeAllForUser(userId, 'account_deleted');
+    await this.tokens.revokeSession(sessionId);
+    await this.removeFiles(files);
+
+    return { message: 'Your account has been deleted.' };
+  }
+
+  /** The account is already gone by now, so a stuck file is logged, not thrown. */
+  private async removeFiles(urls: string[]): Promise<void> {
+    if (!this.storage.isConfigured()) {
+      return;
+    }
+
+    for (const url of urls) {
+      const key = storageKey(url);
+
+      if (key === null) {
+        continue;
+      }
+
+      try {
+        await this.storage.remove(key);
+      } catch (error) {
+        this.logger.warn?.(
+          `Could not remove "${key}" with a deleted account: ${(error as Error).message}`,
+          DeleteMyAccountUseCase.name,
+        );
+      }
+    }
+  }
+}
+
 @Injectable()
 export class RestoreUserUseCase {
   constructor(private readonly users: UserRepository) {}
@@ -205,6 +287,12 @@ export class RestoreUserUseCase {
 
     if (existing.deletedAt === null) {
       throw new BusinessRuleViolationException('This account is not deleted.');
+    }
+
+    if (existing.phone.startsWith(ERASED_PHONE_PREFIX)) {
+      throw new BusinessRuleViolationException(
+        'This person deleted their own account, so its details are gone and it cannot be restored.',
+      );
     }
 
     // The phone number may have been claimed by a new account in the meantime.

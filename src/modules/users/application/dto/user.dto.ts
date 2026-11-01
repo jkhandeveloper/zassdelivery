@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole, UserStatus } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
+  Equals,
   IsEmail,
   IsEnum,
   IsIn,
@@ -18,6 +19,18 @@ import { normalisePhone } from '@/modules/auth/application/dto/auth.dto';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
+
+/**
+ * The word the person typed to confirm.
+ *
+ * Deliberately not a password: nobody can reset a forgotten one, and someone
+ * who signed in by SMS code must not be locked out of deleting their account.
+ */
+export class DeleteAccountDto {
+  @ApiProperty({ example: 'DELETE' })
+  @Equals('DELETE', { message: 'Type DELETE to confirm.' })
+  confirm!: string;
+}
 
 /** Fields a user may change about themselves. Role and status are absent by design. */
 export class UpdateProfileDto {

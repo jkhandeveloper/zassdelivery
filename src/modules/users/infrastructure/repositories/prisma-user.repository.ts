@@ -1,16 +1,39 @@
+import { randomBytes } from 'node:crypto';
+
 import { Injectable } from '@nestjs/common';
-import { UserStatus, type Prisma, type User } from '@prisma/client';
+import {
+  DriverAvailability,
+  DriverStatus,
+  OrderStatus,
+  SubscriptionInvoiceStatus,
+  SubscriptionStatus,
+  Prisma,
+  UserStatus,
+  type User,
+} from '@prisma/client';
 
 import type { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
 import { paginate } from '@/common/utils/pagination.util';
 import { PrismaService } from '@/infrastructure/prisma/prisma.service';
 
 import {
+  ERASED_PHONE_PREFIX,
   UserRepository,
   type CreateUserInput,
   type ListUsersFilter,
   type UpdateUserInput,
 } from '../../domain/repositories/user.repository';
+
+/** Orders that are still being paid for, cooked or carried. */
+const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
+  OrderStatus.PENDING_PAYMENT,
+  OrderStatus.PLACED,
+  OrderStatus.CONFIRMED,
+  OrderStatus.PREPARING,
+  OrderStatus.READY_FOR_PICKUP,
+  OrderStatus.PICKED_UP,
+  OrderStatus.ON_THE_WAY,
+];
 
 @Injectable()
 export class PrismaUserRepository extends UserRepository {
@@ -135,6 +158,124 @@ export class PrismaUserRepository extends UserRepository {
     return this.prisma.user.update({
       where: { id },
       data: { deletedAt: null, status: UserStatus.ACTIVE },
+    });
+  }
+
+  async hasActiveOrders(id: string): Promise<boolean> {
+    const active = await this.prisma.order.count({
+      where: {
+        status: { in: ACTIVE_ORDER_STATUSES },
+        OR: [{ customerId: id }, { restaurant: { ownerId: id } }, { driver: { userId: id } }],
+      },
+    });
+
+    return active > 0;
+  }
+
+  async erase(id: string): Promise<string[]> {
+    const now = new Date();
+    // `phone` and `cnic` are unique and required, so they are overwritten rather
+    // than cleared. Doing so also lets this person sign up again later.
+    const marker = randomBytes(8).toString('hex');
+
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUniqueOrThrow({
+        where: { id },
+        select: {
+          avatarUrl: true,
+          driverProfile: { select: { id: true, documents: { select: { fileUrl: true } } } },
+        },
+      });
+
+      // The record of each order stays for the accounts; who it went to and
+      // where does not.
+      await tx.order.updateMany({
+        where: { customerId: id },
+        data: {
+          deliveryLine1: null,
+          deliveryLandmark: null,
+          deliveryLat: null,
+          deliveryLng: null,
+          recipientName: null,
+          recipientPhone: null,
+          deliveryNotes: null,
+          customerNote: null,
+        },
+      });
+
+      await tx.cart.deleteMany({ where: { userId: id } });
+      await tx.address.deleteMany({ where: { userId: id } });
+      await tx.favorite.deleteMany({ where: { userId: id } });
+      await tx.notification.deleteMany({ where: { userId: id } });
+      await tx.notificationPreference.deleteMany({ where: { userId: id } });
+      await tx.deviceToken.deleteMany({ where: { userId: id } });
+
+      if (user.driverProfile !== null) {
+        await tx.driverDocument.deleteMany({ where: { driverId: user.driverProfile.id } });
+        await tx.driver.update({
+          where: { id: user.driverProfile.id },
+          data: {
+            cnic: `del${marker.slice(0, 12)}`,
+            licenseNumber: null,
+            status: DriverStatus.SUSPENDED,
+            availability: DriverAvailability.OFFLINE,
+            currentLat: null,
+            currentLng: null,
+            lastLocationAt: null,
+            onlineSince: null,
+            payoutBankName: null,
+            payoutAccountTitle: null,
+            payoutAccountNumber: null,
+            paymentQrCodes: Prisma.DbNull,
+            deletedAt: now,
+          },
+        });
+      }
+
+      await tx.restaurant.updateMany({
+        where: { ownerId: id, deletedAt: null },
+        data: { deletedAt: now, isAcceptingOrders: false },
+      });
+
+      // Before the subscription closes: the nightly sweep would otherwise find
+      // an unpaid invoice and suspend a business that no longer exists.
+      await tx.subscriptionInvoice.updateMany({
+        where: {
+          subscription: { ownerId: id },
+          status: {
+            in: [SubscriptionInvoiceStatus.OPEN, SubscriptionInvoiceStatus.PENDING_REVIEW],
+          },
+        },
+        data: {
+          status: SubscriptionInvoiceStatus.VOID,
+          voidReason: 'The owner deleted their account.',
+        },
+      });
+
+      await tx.vendorSubscription.updateMany({
+        where: { ownerId: id },
+        data: { status: SubscriptionStatus.CANCELLED },
+      });
+
+      await tx.user.update({
+        where: { id },
+        data: {
+          phone: `${ERASED_PHONE_PREFIX}${marker}`,
+          phoneVerifiedAt: null,
+          email: null,
+          emailVerifiedAt: null,
+          passwordHash: null,
+          fullName: 'Deleted user',
+          avatarUrl: null,
+          pushToken: null,
+          status: UserStatus.BANNED,
+          deletedAt: now,
+        },
+      });
+
+      const documents = user.driverProfile?.documents.map((document) => document.fileUrl) ?? [];
+
+      return user.avatarUrl === null ? documents : [user.avatarUrl, ...documents];
     });
   }
 

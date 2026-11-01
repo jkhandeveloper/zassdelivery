@@ -11,10 +11,12 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 
 import { ApiPaginatedResponse } from '@/common/decorators/api-paginated-response.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { ApiErrorResponseDto } from '@/common/dto/api-response.dto';
+import type { AuthenticatedUser } from '@/common/interfaces/authenticated-user.interface';
 import type { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
 
 import { MessageResponseDto } from '../auth/application/dto/auth-response.dto';
@@ -26,7 +28,7 @@ import {
 } from './application/dto/notification-preference.dto';
 import { ListAddressesQueryDto, ListFavoritesQueryDto } from './application/dto/user-query.dto';
 import { AddressDto, UserDto } from './application/dto/user-response.dto';
-import { UpdateProfileDto } from './application/dto/user.dto';
+import { DeleteAccountDto, UpdateProfileDto } from './application/dto/user.dto';
 import {
   CreateAddressUseCase,
   DeleteAddressUseCase,
@@ -47,6 +49,7 @@ import {
   UpdateNotificationPreferencesUseCase,
   UpdateProfileUseCase,
 } from './application/use-cases/profile.use-cases';
+import { DeleteMyAccountUseCase } from './application/use-cases/users.use-cases';
 
 /**
  * Everything a signed-in user can do to their own account.
@@ -75,6 +78,7 @@ export class MeController {
     private readonly listFavorites: ListFavoritesUseCase,
     private readonly addFavorite: AddFavoriteUseCase,
     private readonly removeFavorite: RemoveFavoriteUseCase,
+    private readonly deleteAccount: DeleteMyAccountUseCase,
   ) {}
 
   // ── Profile ────────────────────────────────────────────────
@@ -98,6 +102,25 @@ export class MeController {
   @ApiResponse({ status: 409, description: 'Email already in use.' })
   update(@CurrentUser('id') userId: string, @Body() dto: UpdateProfileDto): Promise<UserDto> {
     return this.updateProfile.execute(userId, dto);
+  }
+
+  @Post('delete')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 3600000 } })
+  @ApiOperation({
+    summary: 'Delete my account',
+    description:
+      'Permanent. Erases personal details, addresses, saved items and uploaded ' +
+      'documents, and closes any business the caller owns. Order and payment ' +
+      'records stay for the accounts, without anything that identifies the person.',
+  })
+  @ApiResponse({ status: 200, type: MessageResponseDto })
+  @ApiResponse({ status: 422, description: 'An order is still in progress.' })
+  remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() _dto: DeleteAccountDto,
+  ): Promise<MessageResponseDto> {
+    return this.deleteAccount.execute(user.id, user.sessionId);
   }
 
   // ── Notification preferences ───────────────────────────────

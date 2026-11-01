@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AuthModule } from '../auth/auth.module';
+import { StorageModule } from '../storage/storage.module';
 import { AddressRepository } from './domain/repositories/address.repository';
 import { FavoriteRepository } from './domain/repositories/favorite.repository';
 import { NotificationPreferenceRepository } from './domain/repositories/notification-preference.repository';
@@ -32,6 +33,7 @@ import {
 import {
   ChangeUserStatusUseCase,
   CreateUserUseCase,
+  DeleteMyAccountUseCase,
   DeleteUserUseCase,
   GetUserUseCase,
   ListUsersUseCase,
@@ -44,7 +46,7 @@ import { UsersController } from './users.controller';
 @Module({
   // AuthModule supplies PasswordService for admin-created accounts and
   // RefreshTokenRepository so a role change or suspension can end sessions.
-  imports: [AuthModule],
+  imports: [AuthModule, StorageModule],
   controllers: [UsersController, MeController],
   providers: [
     ListUsersUseCase,
@@ -53,6 +55,7 @@ import { UsersController } from './users.controller';
     UpdateUserUseCase,
     ChangeUserStatusUseCase,
     DeleteUserUseCase,
+    DeleteMyAccountUseCase,
     RestoreUserUseCase,
 
     GetProfileUseCase,
