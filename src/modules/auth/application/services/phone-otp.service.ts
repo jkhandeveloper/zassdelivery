@@ -105,9 +105,9 @@ export class PhoneOtpService {
       );
     }
 
-    const code =
-      this.app.devOtpCode ??
-      String(randomInt(0, 10 ** OTP_CODE_LENGTH)).padStart(OTP_CODE_LENGTH, '0');
+    // Always random, even with a developer code set: that code is typed by
+    // testers, and is never texted to the people signing up.
+    const code = String(randomInt(0, 10 ** OTP_CODE_LENGTH)).padStart(OTP_CODE_LENGTH, '0');
     const codeKey = this.key('code', purpose, phone);
 
     await this.redis.setJson<StoredCode>(

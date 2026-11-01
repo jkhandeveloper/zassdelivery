@@ -170,11 +170,12 @@ describe('PhoneOtpService', () => {
     await expect(service.send(PHONE, 'register')).rejects.toThrow(/not available/);
   });
 
-  it('texts the developer code and accepts it even unsent, when one is set', async () => {
+  it('never texts the developer code, but accepts it even unsent, when one is set', async () => {
     const { service, sms } = build('123456');
 
     await service.send(PHONE, 'register');
-    expect(sms.lastCode()).toBe('123456');
+    expect(sms.lastCode()).toMatch(/^\d{6}$/);
+    expect(sms.lastCode()).not.toBe('123456');
 
     await expect(service.verify(PHONE, 'register', '123456')).resolves.toBeUndefined();
     await expect(service.verify(PHONE, 'login', '123456')).resolves.toBeUndefined();
