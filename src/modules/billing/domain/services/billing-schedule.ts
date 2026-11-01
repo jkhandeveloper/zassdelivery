@@ -81,6 +81,23 @@ export function periodFrom(periodStart: Date, graceDays = BILLING_GRACE_DAYS): B
 }
 
 /**
+ * The cover an invoice buys when it is settled at `renewedAt`.
+ *
+ * A vendor always gets a full cycle for the fee. Settling late starts the cycle
+ * at the renewal, so days spent overdue or closed are never charged for;
+ * settling early starts it when the current period ends, so the days already
+ * paid for are not lost either.
+ */
+export function renewalPeriod(
+  invoiceStart: Date,
+  renewedAt: Date,
+): Pick<BillingPeriod, 'periodStart' | 'periodEnd'> {
+  const periodStart = renewedAt > invoiceStart ? renewedAt : invoiceStart;
+
+  return { periodStart, periodEnd: addDays(periodStart, BILLING_CYCLE_DAYS) };
+}
+
+/**
  * The free trial, starting the day a listing is approved.
  *
  * Billing begins at approval rather than at registration because an unapproved

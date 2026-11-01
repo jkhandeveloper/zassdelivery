@@ -2374,9 +2374,10 @@ model SubscriptionInvoice {
   amount   Decimal                   @db.Decimal(10, 2)
   currency String                    @default("PKR") @db.VarChar(3)
 
-  /// What this invoice buys. `dueAt` equals `periodStart`: the fee is paid up
-  /// front, which is why the first month being free is what gets a vendor
-  /// trading before they are asked for anything.
+  /// What this invoice buys. `dueAt` equals `periodStart` when it is raised: the
+  /// fee is paid up front, which is why the first month being free is what gets
+  /// a vendor trading before they are asked for anything. Settling it late moves
+  /// the period to start at the renewal, so the vendor still gets a full cycle.
   periodStart DateTime @map("period_start") @db.Timestamptz(3)
   periodEnd   DateTime @map("period_end") @db.Timestamptz(3)
   dueAt       DateTime @map("due_at") @db.Timestamptz(3)

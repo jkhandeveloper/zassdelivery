@@ -3,7 +3,7 @@ import { SubscriptionInvoiceStatus, SubscriptionStatus } from '@prisma/client';
 
 import { PaymentQrCodeDto, type PaymentQrProvider } from '@/common/dto/payment-qr-code.dto';
 
-import { daysUntil } from '../../domain/services/billing-schedule';
+import { daysUntil, renewalPeriod } from '../../domain/services/billing-schedule';
 import type {
   InvoiceWithContext,
   SubscriptionWithContext,
@@ -199,6 +199,14 @@ export function toInvoiceDto(
   options?: { includeOwner?: boolean; now?: Date },
 ): SubscriptionInvoiceDto {
   const now = options?.now ?? new Date();
+  const unsettled =
+    invoice.status === SubscriptionInvoiceStatus.OPEN ||
+    invoice.status === SubscriptionInvoiceStatus.PENDING_REVIEW;
+  // An overdue invoice shows the month paying it now would buy, not the one
+  // raised with it, which has already started running out.
+  const period = unsettled
+    ? renewalPeriod(invoice.periodStart, now)
+    : { periodStart: invoice.periodStart, periodEnd: invoice.periodEnd };
 
   return {
     id: invoice.id,
@@ -213,8 +221,8 @@ export function toInvoiceDto(
     statusText: INVOICE_STATUS_TEXT[invoice.status],
     amount: Number(invoice.amount),
     currency: invoice.currency,
-    periodStart: invoice.periodStart,
-    periodEnd: invoice.periodEnd,
+    periodStart: period.periodStart,
+    periodEnd: period.periodEnd,
     dueAt: invoice.dueAt,
     blockAt: invoice.blockAt,
     daysUntilDue: daysUntil(invoice.dueAt, now),

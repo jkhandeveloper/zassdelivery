@@ -286,6 +286,8 @@ export class PrismaBillingRepository extends BillingRepository {
         data: {
           status: SubscriptionInvoiceStatus.PAID,
           paidAt,
+          periodStart: input.nextPeriodStart,
+          periodEnd: input.nextPeriodEnd,
           confirmedById: input.confirmedById,
           ...(input.channel !== undefined && { channel: input.channel }),
           ...(input.reference !== undefined && { reference: input.reference }),
@@ -451,6 +453,8 @@ export class PrismaBillingRepository extends BillingRepository {
         data: {
           status: SubscriptionInvoiceStatus.VOID,
           voidReason: reason,
+          periodStart: nextPeriod.start,
+          periodEnd: nextPeriod.end,
           confirmedById: reviewedById,
         },
       });

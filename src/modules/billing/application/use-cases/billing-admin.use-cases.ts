@@ -12,6 +12,7 @@ import type { PaginatedResult } from '@/common/interfaces/paginated-result.inter
 import { NotifyService } from '@/modules/notifications/application/use-cases/notify.service';
 
 import { BillingRepository } from '../../domain/repositories/billing.repository';
+import { renewalPeriod } from '../../domain/services/billing-schedule';
 import {
   toInvoiceDto,
   toSubscriptionDto,
@@ -127,13 +128,15 @@ export class ConfirmTransferUseCase {
       );
     }
 
+    // Dated from the confirmation, not the transfer: a closed listing only comes
+    // back up now, so that is when the vendor's month can start.
+    const period = renewalPeriod(invoice.periodStart, new Date());
+
     const settled = await this.billing.confirmInvoice({
       invoiceId: invoice.id,
       confirmedById: actor.id,
-      // The invoice buys its own period, so that is exactly what the
-      // subscription rolls onto.
-      nextPeriodStart: invoice.periodStart,
-      nextPeriodEnd: invoice.periodEnd,
+      nextPeriodStart: period.periodStart,
+      nextPeriodEnd: period.periodEnd,
     });
 
     await this.notify.notify({
@@ -142,7 +145,7 @@ export class ConfirmTransferUseCase {
       title: 'Payment received',
       body:
         `We've confirmed your payment for ${invoice.restaurant.name}. ` +
-        `You're paid up until ${formatDate(invoice.periodEnd)}.`,
+        `You're paid up until ${formatDate(period.periodEnd)}.`,
       data: { invoiceId: invoice.id, restaurantId: invoice.restaurantId, kind: 'billing' },
     });
 
@@ -219,9 +222,11 @@ export class VoidInvoiceUseCase {
       throw new BusinessRuleViolationException('This invoice has already been waived.');
     }
 
+    const period = renewalPeriod(invoice.periodStart, new Date());
+
     const voided = await this.billing.voidInvoice(invoice.id, dto.reason, actor.id, {
-      start: invoice.periodStart,
-      end: invoice.periodEnd,
+      start: period.periodStart,
+      end: period.periodEnd,
     });
 
     await this.notify.notify({
@@ -230,7 +235,7 @@ export class VoidInvoiceUseCase {
       title: 'This month is on us',
       body:
         `Invoice ${invoice.invoiceNumber} for ${invoice.restaurant.name} has been waived. ` +
-        `Nothing to pay until ${formatDate(invoice.periodEnd)}.`,
+        `Nothing to pay until ${formatDate(period.periodEnd)}.`,
       data: { invoiceId: invoice.id, restaurantId: invoice.restaurantId, kind: 'billing' },
     });
 
@@ -318,11 +323,15 @@ export class RecordPaymentUseCase {
       throw new BusinessRuleViolationException('This invoice was waived, so nothing is owed.');
     }
 
+    // `dto.paidAt` dates the money, not the cover: a closed listing only comes
+    // back up now, however long ago the transfer arrived.
+    const period = renewalPeriod(invoice.periodStart, new Date());
+
     const settled = await this.billing.confirmInvoice({
       invoiceId: invoice.id,
       confirmedById: actor.id,
-      nextPeriodStart: invoice.periodStart,
-      nextPeriodEnd: invoice.periodEnd,
+      nextPeriodStart: period.periodStart,
+      nextPeriodEnd: period.periodEnd,
       channel: dto.channel,
       reference: dto.reference ?? null,
       paidAt: dto.paidAt,
@@ -334,7 +343,7 @@ export class RecordPaymentUseCase {
       title: 'Payment recorded',
       body:
         `We've recorded your payment for ${invoice.restaurant.name}. ` +
-        `You're paid up until ${formatDate(invoice.periodEnd)}.`,
+        `You're paid up until ${formatDate(period.periodEnd)}.`,
       data: { invoiceId: invoice.id, restaurantId: invoice.restaurantId, kind: 'billing' },
     });
 

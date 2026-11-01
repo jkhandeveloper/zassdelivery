@@ -7,12 +7,35 @@ import {
   isPastDue,
   periodFrom,
   reminderBucket,
+  renewalPeriod,
   shouldRemind,
   trialPeriod,
 } from './billing-schedule';
 
 /** A fixed instant, so nothing here depends on when the suite runs. */
 const START = new Date('2026-01-15T09:00:00.000Z');
+
+describe('renewalPeriod', () => {
+  it.each([3, 15, 45])('gives a full cycle to a vendor renewing %i days late', (daysLate) => {
+    const renewedAt = addDays(START, daysLate);
+
+    expect(renewalPeriod(START, renewedAt)).toEqual({
+      periodStart: renewedAt,
+      periodEnd: addDays(renewedAt, BILLING_CYCLE_DAYS),
+    });
+  });
+
+  it('keeps the days already paid for when a vendor renews early', () => {
+    expect(renewalPeriod(START, addDays(START, -5))).toEqual({
+      periodStart: START,
+      periodEnd: addDays(START, BILLING_CYCLE_DAYS),
+    });
+  });
+
+  it('runs from the due date when a vendor renews exactly on it', () => {
+    expect(renewalPeriod(START, START).periodStart).toEqual(START);
+  });
+});
 
 describe('periodFrom', () => {
   it('runs for exactly the cycle length', () => {

@@ -75,7 +75,11 @@ export interface SubmitTransferInput {
 export interface ConfirmInvoiceInput {
   invoiceId: string;
   confirmedById: string;
-  /** The period the payment buys, computed by the caller from the schedule. */
+  /**
+   * The period the payment buys, computed by the caller from the schedule.
+   * Written to the invoice as well as the subscription, because a late renewal
+   * moves it away from the dates the invoice was raised with.
+   */
   nextPeriodStart: Date;
   nextPeriodEnd: Date;
 
